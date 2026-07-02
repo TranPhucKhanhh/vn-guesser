@@ -1,0 +1,715 @@
+:root {
+  /* Central color tokens. Change these first when tuning the visual style. */
+  color-scheme: light;
+  --ink: #1d252c;
+  --muted: #63707b;
+  --line: #d8e0e6;
+  --panel: #ffffff;
+  --soft: #eef3f6;
+  --green: #277a55;
+  --green-dark: #1e6245;
+  --red: #b94a48;
+  --blue: #316fa5;
+  --shadow: 0 18px 45px rgba(24, 42, 55, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  /* The app is designed as a single-screen game, not a scrolling web page. */
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  min-width: 320px;
+  font-family: "Segoe UI", "Noto Sans", system-ui, -apple-system, BlinkMacSystemFont, Inter, sans-serif;
+  color: var(--ink);
+  background: #dce7ec;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-shell {
+  /* Two rows: fixed-height top bar and flexible game area. */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100vw;
+  height: 100dvh;
+  padding: clamp(10px, 1.3vw, 18px);
+  gap: clamp(10px, 1.2vw, 16px);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 70px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 32px rgba(28, 48, 59, 0.1);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: var(--red);
+  color: white;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: clamp(1rem, 1.7vw, 1.35rem);
+  line-height: 1.1;
+}
+
+.brand p {
+  max-width: min(44vw, 520px);
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  gap: 8px;
+  width: min(48vw, 560px);
+}
+
+.metric {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfc;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 5px;
+  font-size: clamp(0.9rem, 1.4vw, 1.12rem);
+  line-height: 1;
+}
+
+.game-grid {
+  /* Desktop layout: large image on the left, game controls on the right. */
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.8fr);
+  min-height: 0;
+  gap: clamp(10px, 1.2vw, 16px);
+}
+
+.photo-panel,
+.control-panel,
+.map-panel,
+.round-panel,
+.action-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.photo-panel {
+  /* Image takes all remaining height; toolbar stays pinned below it. */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.photo-frame {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(29, 37, 44, 0.22);
+  border-radius: 8px;
+  background: #11191f;
+  box-shadow: var(--shadow);
+}
+
+.photo-frame img {
+  /* Static images fill the stage without changing the layout. */
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  color: #f5fbff;
+  background:
+    linear-gradient(135deg, rgba(36, 100, 72, 0.78), rgba(41, 99, 145, 0.76)),
+    url("images/placeholder.svg") center / cover no-repeat;
+  text-align: center;
+}
+
+.image-fallback span {
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(10, 18, 24, 0.62);
+  font-weight: 800;
+}
+
+.image-fallback.hidden {
+  display: none;
+}
+
+.photo-toolbar {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  align-items: center;
+  min-height: 58px;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.icon-button:hover {
+  background: #dde8ee;
+}
+
+.photo-meta {
+  min-width: 0;
+  text-align: center;
+}
+
+.photo-meta strong,
+.photo-meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-meta strong {
+  font-size: 0.98rem;
+}
+
+.photo-meta span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.control-panel {
+  /* Right column: map grows, status/actions stay compact. */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 10px;
+}
+
+.map-panel,
+.round-panel,
+.action-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.map-panel {
+  /* Blank map component. Add SVG/canvas/Leaflet inside .map-surface. */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.map-surface {
+  /* Native canvas map surface. The grid is only visible before data finishes loading. */
+  position: relative;
+  min-height: 0;
+  background:
+    linear-gradient(#dbe5ea 1px, transparent 1px),
+    linear-gradient(90deg, #dbe5ea 1px, transparent 1px),
+    #f7fafb;
+  background-size: 26px 26px;
+}
+
+#map-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+#map-canvas:active {
+  cursor: grabbing;
+}
+
+
+.map-label {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  left: 12px;
+  bottom: 12px;
+  display: block;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  border: 1px solid rgba(99, 112, 123, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.map-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-label span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.map-info-panel {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  width: min(220px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  overflow: hidden;
+  border: 1px solid rgba(99, 112, 123, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 20px rgba(28, 48, 59, 0.14);
+}
+
+.map-info-panel.is-collapsed {
+  width: 32px;
+}
+
+.map-info-toggle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  min-height: 30px;
+  align-self: stretch;
+  border-right: 1px solid var(--line);
+  background: #eef5f8;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.map-info-toggle:hover {
+  background: #e3eef3;
+}
+
+.map-info-content {
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.map-info-panel.is-collapsed .map-info-content {
+  display: none;
+}
+
+.map-info-content strong,
+.map-info-content span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-info-content strong {
+  font-size: 0.86rem;
+  line-height: 1.15;
+}
+
+.map-info-content span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.map-info-content dl {
+  display: grid;
+  gap: 3px;
+  margin: 7px 0 0;
+}
+
+.map-info-content dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.map-info-content dt {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.map-info-content dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.map-hover-tooltip {
+  position: absolute;
+  z-index: 4;
+  display: none;
+  max-width: min(220px, calc(100% - 24px));
+  min-height: 28px;
+  padding: 6px 9px;
+  border: 1px solid rgba(29, 37, 44, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 10px 24px rgba(28, 48, 59, 0.18);
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.15;
+  pointer-events: none;
+  transform: translate(12px, 12px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.map-hover-tooltip.is-visible {
+  display: block;
+}
+
+.map-guess-marker {
+  position: absolute;
+  z-index: 5;
+  display: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: transparent;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.map-guess-marker.is-visible {
+  display: block;
+}
+
+.map-actions {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  justify-content: start;
+}
+
+.round-panel {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fbfdfe;
+}
+
+.status-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.status-row strong {
+  font-size: 0.9rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.action-panel {
+  display: grid;
+  grid-template-columns: 1fr 0.75fr 0.72fr;
+  gap: 8px;
+  padding: 8px;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.flag-tool-button {
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.flag-tool-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  padding: 0;
+  border: 1px solid #c8d1d8;
+  background: #fff5f5;
+  color: #d94b4b;
+  font-size: 1.2rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.flag-tool-button:hover {
+  border-color: #d94b4b;
+  background: #ffe9e9;
+}
+
+.flag-tool-button:active {
+  cursor: grabbing;
+}
+
+.flag-tool-button.is-dragging {
+  border-color: #d94b4b;
+  background: #ffe1e1;
+  cursor: grabbing;
+}
+
+.primary-button {
+  background: var(--green);
+  color: white;
+}
+
+.primary-button:hover {
+  background: var(--green-dark);
+}
+
+.secondary-button {
+  border: 1px solid #b7c8d3;
+  background: #eef5f8;
+  color: var(--ink);
+}
+
+.secondary-button:hover {
+  background: #e3eef3;
+}
+
+.ghost-button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ghost-button:hover {
+  border-color: var(--line);
+  background: #f7fafb;
+  color: var(--ink);
+}
+
+@media (max-width: 820px) {
+  /* Tablet/small laptop layout: controls move below the image to preserve height. */
+  .app-shell {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .topbar {
+    min-height: 64px;
+    padding: 8px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    font-size: 0.86rem;
+  }
+
+  .brand p {
+    display: none;
+  }
+
+  .score-strip {
+    grid-template-columns: repeat(4, minmax(52px, 1fr));
+    width: min(58vw, 430px);
+    gap: 5px;
+  }
+
+  .metric {
+    padding: 6px;
+  }
+
+  .metric span {
+    font-size: 0.64rem;
+  }
+
+  .metric strong {
+    font-size: 0.78rem;
+  }
+
+  .game-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.2fr) minmax(230px, 0.85fr);
+    gap: 8px;
+  }
+
+  .control-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 0.55fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .map-panel {
+    grid-row: 1 / 3;
+  }
+
+  .round-panel {
+    min-height: 0;
+  }
+
+  .status-row {
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+
+  .action-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .ghost-button,
+  .flag-tool-button {
+    min-height: 36px;
+    padding: 7px 8px;
+    font-size: 0.82rem;
+  }
+
+  .flag-tool-button {
+    width: 36px;
+    padding: 0;
+    font-size: 1rem;
+  }
+
+  .photo-toolbar {
+    min-height: 52px;
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+  }
+
+  .icon-button {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Phone layout: everything still fits inside the viewport without page scrolling. */
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .score-strip {
+    width: 100%;
+  }
+
+  .game-grid {
+    grid-template-rows: minmax(0, 1.05fr) minmax(260px, 0.95fr);
+  }
+
+  .control-panel {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+
+  .map-panel {
+    grid-row: auto;
+  }
+
+  .round-panel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .status-row {
+    display: grid;
+    align-content: center;
+    min-height: 46px;
+    gap: 3px;
+  }
+
+  .status-row strong {
+    text-align: left;
+  }
+
+  .action-panel {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}

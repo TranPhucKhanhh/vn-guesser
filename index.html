@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Đoán Địa Danh Việt Nam</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <!-- The whole game is locked to the browser viewport; CSS prevents page scrolling. -->
+    <div class="app-shell">
+      <!-- Header: persistent game information shown above the play area. -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">VN</span>
+          <div>
+            <h1>Đoán Địa Danh Việt Nam</h1>
+            <p id="roundLocation">Vị trí đang được ẩn</p>
+          </div>
+        </div>
+
+        <div class="score-strip" aria-label="Trạng thái trò chơi">
+          <div class="metric">
+            <span>Vòng</span>
+            <strong id="roundNumber">1/1</strong>
+          </div>
+          <div class="metric">
+            <span>Điểm</span>
+            <strong id="scoreValue">0</strong>
+          </div>
+          <div class="metric">
+            <span>Liên tiếp</span>
+            <strong id="streakValue">0</strong>
+          </div>
+          <div class="metric">
+            <span>Giờ</span>
+            <strong id="timerValue">00:00</strong>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main game area: left side is the image, right side is map + controls. -->
+      <main class="game-grid">
+        <!-- Static round image. Later, images/locations.js decides which file appears here. -->
+        <section class="photo-panel" aria-label="Ảnh vòng chơi">
+          <div class="photo-frame">
+            <img id="roundImage" alt="Địa điểm của vòng hiện tại">
+            <div id="imageFallback" class="image-fallback">
+              <span>Sẵn sàng</span>
+            </div>
+          </div>
+
+          <div class="photo-toolbar">
+            <button class="icon-button" id="previousRoundButton" type="button" aria-label="Vòng trước">
+              <span aria-hidden="true">&lsaquo;</span>
+            </button>
+            <div class="photo-meta">
+              <strong id="imageTitle">Đang chờ ảnh</strong>
+              <span id="imageSubtitle">Thêm vòng trong images/locations.js</span>
+            </div>
+            <button class="icon-button" id="nextRoundButton" type="button" aria-label="Vòng sau">
+              <span aria-hidden="true">&rsaquo;</span>
+            </button>
+          </div>
+        </section>
+
+        <aside class="control-panel" aria-label="Điều khiển trò chơi">
+          <!-- Map placeholder. This is the best place to add an SVG/canvas map later. -->
+          <section class="map-panel" aria-label="Bản đồ dự đoán">
+            <div class="map-surface">
+              <canvas id="map-canvas">
+                Bản đồ Việt Nam
+              </canvas>
+              <div class="map-label">
+                <span id="mapStatus">Đang tải dữ liệu</span>
+              </div>
+              <div class="map-info-panel" id="mapInfoPanel">
+                <button class="map-info-toggle" id="mapInfoToggle" type="button" aria-label="Ẩn thông tin bản đồ" aria-expanded="true">&gt;</button>
+                <div class="map-info-content">
+                  <strong id="mapInfoTitle">Việt Nam</strong>
+                  <span id="mapInfoSubtitle">Di chuột qua bản đồ</span>
+                  <dl>
+                    <div>
+                      <dt>Dân số</dt>
+                      <dd id="mapInfoPopulation">--</dd>
+                    </div>
+                    <div>
+                      <dt>Diện tích</dt>
+                      <dd id="mapInfoArea">--</dd>
+                    </div>
+                    <div>
+                      <dt>Loại</dt>
+                      <dd id="mapInfoType">--</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+              <div class="map-hover-tooltip" id="mapHoverTooltip" aria-hidden="true"></div>
+              <button class="map-guess-marker" id="mapGuessMarker" type="button" aria-label="Kéo điểm dự đoán"></button>
+            </div>
+            <div class="map-actions">
+              <button id="placeGuessButton" class="flag-tool-button" type="button" aria-label="Kéo cờ để đặt dự đoán" title="Kéo cờ để đặt dự đoán">&#9873;</button>
+              <button id="clearGuessButton" class="ghost-button" type="button">Xóa</button>
+            </div>
+          </section>
+
+          <!-- Results/status text controlled by app.js render(). -->
+          <section class="round-panel" aria-label="Chi tiết vòng">
+            <div class="status-row">
+              <span>Dự đoán</span>
+              <strong id="guessStatus">Chưa đặt</strong>
+            </div>
+            <div class="status-row">
+              <span>Khoảng cách</span>
+              <strong id="distanceValue">-- km</strong>
+            </div>
+            <div class="status-row">
+              <span>Điểm vòng</span>
+              <strong id="roundPoints">--</strong>
+            </div>
+          </section>
+
+          <!-- Primary game actions. These currently update placeholder game state. -->
+          <section class="action-panel" aria-label="Thao tác chính">
+            <button id="submitButton" class="primary-button" type="button">Gửi Dự Đoán</button>
+            <button id="revealButton" class="secondary-button" type="button">Tiết Lộ</button>
+            <button id="restartButton" class="ghost-button" type="button">Chơi Lại</button>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <!-- locations.js must load before app.js so window.GEOGUESSER_ROUNDS exists. -->
+    <script src="images/locations.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
