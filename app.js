@@ -1,4 +1,10 @@
 (function () {
+  // Frontend reads large assets through the R2 guard Worker in production.
+  // To test only local files, set this to "" or set window.GEOGUESSER_ASSET_BASE_URL before app.js loads.
+  const DEFAULT_ASSET_BASE_URL = "https://vietnam-geoguesser-r2-guard.my-slave.workers.dev";
+  const asset_base_url = normalizeAssetBaseUrl(window.GEOGUESSER_ASSET_BASE_URL || DEFAULT_ASSET_BASE_URL);
+  const local_only_assets = new Set(["images/placeholder.svg"]);
+
   // Used only when images/locations.js has no real rounds yet.
   const fallback_rounds = [
     {
@@ -116,6 +122,31 @@
     return rounds[state.round_index];
   }
 
+  function normalizeAssetBaseUrl(url) {
+    return (url || "").replace(/\/+$/, "");
+  }
+
+  function assetUrl(path) {
+    if (!path || local_only_assets.has(path)) return path;
+
+    if (/^(https?:)?\/\//.test(path) || path.startsWith("data:") || path.startsWith("blob:")) {
+      return path;
+    }
+
+    const clean_path = path.replace(/^\.?\//, "");
+    return asset_base_url ? `${asset_base_url}/${clean_path}` : clean_path;
+  }
+
+  async function fetchJsonAsset(path) {
+    const response = await fetch(assetUrl(path));
+
+    if (!response.ok) {
+      throw new Error(`Could not load ${path}: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
   // Converts seconds into the mm:ss text shown in the top bar.
   function formatTime(total_seconds) {
     const minutes = Math.floor(total_seconds / 60).toString().padStart(2, "0");
@@ -186,7 +217,7 @@
 
     elements.image_title.textContent = state.revealed ? title : "";
     elements.image_subtitle.textContent = state.revealed ? province : "";
-    elements.round_image.src = round.image || "images/placeholder.svg";
+    elements.round_image.src = assetUrl(round.image || "images/placeholder.svg");
     elements.round_image.alt = title;
 
     elements.distance_value.textContent = state.revealed && state.distance !== null
@@ -251,8 +282,8 @@
   async function loadMapData() {
     try {
       const [province_geojson, special_geojson] = await Promise.all([
-        fetch("database/provinces.geojson").then((response) => response.json()),
-        fetch("database/special.geojson").then((response) => response.json())
+        fetchJsonAsset("provinces.geojson"),
+        fetchJsonAsset("special.geojson")
       ]);
 
       prepareMapFeatures(province_geojson, special_geojson);
@@ -890,8 +921,7 @@
 
     map_state.ward_loading_code = province_code;
     const load_promise = (async () => {
-      const response = await fetch(`database/wards/${province_code}.geojson`);
-      const ward_geojson = await response.json();
+      const ward_geojson = await fetchJsonAsset(`wards/${province_code}.geojson`);
       const parent_properties = map_state.province_properties_by_code[province_code] || null;
       const ward_features = ward_geojson.features.map((feature) => {
         return prepareFeature(feature, "ward", 0, parent_properties);
