@@ -6,7 +6,42 @@
     <title>Đoán Địa Danh Việt Nam</title>
     <link rel="stylesheet" href="styles.css">
   </head>
-  <body>
+  <body class="auth-pending">
+    <section class="auth-gate" id="authGate" aria-labelledby="authTitle" hidden>
+      <div class="auth-dialog">
+        <span class="auth-brand" aria-hidden="true">VN</span>
+        <h2 id="authTitle">Đăng nhập để chơi</h2>
+        <p>Tạo tài khoản mới hoặc tiếp tục với tài khoản hiện có.</p>
+        <div class="auth-actions">
+          <button class="primary-button" id="authLoginButton" type="button">Đăng nhập</button>
+          <button class="secondary-button" id="authSignupButton" type="button">Tạo tài khoản</button>
+        </div>
+        <p class="auth-message" id="authMessage" role="status"></p>
+      </div>
+    </section>
+
+    <section class="account-view" id="accountView" aria-labelledby="accountTitle" hidden>
+      <div class="account-dialog" role="dialog" aria-modal="true">
+        <button class="account-close-button" id="accountCloseButton" type="button" aria-label="Đóng trang tài khoản" title="Đóng">
+          &times;
+        </button>
+        <div class="account-avatar" aria-label="Ảnh đại diện mặc định">
+          <span id="accountAvatarInitials" aria-hidden="true">U</span>
+        </div>
+        <div class="account-heading">
+          <span>Tài khoản</span>
+          <h2 id="accountTitle">Người chơi</h2>
+        </div>
+        <div class="account-field">
+          <span>Tên người dùng đã đăng ký</span>
+          <strong id="accountUsername">Người chơi</strong>
+        </div>
+        <p class="account-note">Ảnh đại diện mặc định hiện chưa thể thay đổi.</p>
+        <button class="account-logout-button" id="authLogoutButton" type="button">Đăng xuất</button>
+        <p class="account-message" id="accountMessage" role="status"></p>
+      </div>
+    </section>
+
     <!-- The whole game is locked to the browser viewport; CSS prevents page scrolling. -->
     <div class="app-shell">
       <!-- Header: persistent game information shown above the play area. -->
@@ -19,23 +54,29 @@
           </div>
         </div>
 
-        <div class="score-strip" aria-label="Trạng thái trò chơi">
-          <div class="metric">
-            <span>Vòng</span>
-            <strong id="roundNumber">1/1</strong>
+        <div class="topbar-actions">
+          <div class="score-strip" aria-label="Trạng thái trò chơi">
+            <div class="metric">
+              <span>Vòng</span>
+              <strong id="roundNumber">1/1</strong>
+            </div>
+            <div class="metric">
+              <span>Điểm</span>
+              <strong id="scoreValue">0</strong>
+            </div>
+            <div class="metric">
+              <span>Liên tiếp</span>
+              <strong id="streakValue">0</strong>
+            </div>
+            <div class="metric">
+              <span>Giờ</span>
+              <strong id="timerValue">00:00</strong>
+            </div>
           </div>
-          <div class="metric">
-            <span>Điểm</span>
-            <strong id="scoreValue">0</strong>
-          </div>
-          <div class="metric">
-            <span>Liên tiếp</span>
-            <strong id="streakValue">0</strong>
-          </div>
-          <div class="metric">
-            <span>Giờ</span>
-            <strong id="timerValue">00:00</strong>
-          </div>
+          <button class="auth-user-button" id="authUserButton" type="button" aria-label="Mở trang tài khoản" aria-expanded="false" hidden>
+            <span class="auth-user-initials" id="authUserInitials" aria-hidden="true">U</span>
+            <span class="auth-user-name" id="authUserName">Người chơi</span>
+          </button>
         </div>
       </header>
 
@@ -130,6 +171,10 @@
       </main>
     </div>
 
+    <!-- Auth0 must initialize before app.js decides whether to load game assets. -->
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.18/auth0-spa-js.production.js"></script>
+    <script src="auth-config.js"></script>
+    <script src="auth.js"></script>
     <!-- locations.js must load before app.js so window.GEOGUESSER_ROUNDS exists. -->
     <script src="images/locations.js"></script>
     <script src="app.js"></script>

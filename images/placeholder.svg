@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Vietnam GeoGuesser placeholder</title>
+  <desc id="desc">A simple static landscape placeholder for the image game view.</desc>
+  <rect width="1600" height="1000" fill="#273f4a"/>
+  <path d="M0 660 C240 570 410 620 610 540 C790 470 960 520 1160 430 C1360 340 1460 390 1600 330 L1600 1000 L0 1000 Z" fill="#246448"/>
+  <path d="M0 760 C260 650 480 720 730 620 C980 520 1180 620 1600 500 L1600 1000 L0 1000 Z" fill="#1e523d"/>
+  <path d="M0 830 C270 760 500 790 730 735 C1000 670 1240 720 1600 635 L1600 1000 L0 1000 Z" fill="#173e33"/>
+  <circle cx="1230" cy="220" r="92" fill="#f2c86b"/>
+  <path d="M180 365 L260 235 L350 365 Z" fill="#dbe9ef"/>
+  <path d="M250 365 L390 170 L540 365 Z" fill="#f4f7f8"/>
+  <path d="M450 365 L590 230 L720 365 Z" fill="#c9dce5"/>
+  <path d="M1075 560 C1130 505 1215 505 1275 560 C1330 612 1420 612 1475 560" fill="none" stroke="#dcecef" stroke-width="18" stroke-linecap="round" opacity=".72"/>
+  <text x="800" y="905" text-anchor="middle" fill="#f7fbfd" font-family="Arial, sans-serif" font-size="52" font-weight="700">Add static location images</text>
+</svg>

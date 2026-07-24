@@ -1,9 +1,20 @@
-(function () {
+(async function () {
+  const auth_state = await (
+    window.GEOGUESSER_AUTH_READY ||
+    Promise.resolve({ required: false, authenticated: false })
+  );
+
+  // Do not load map/image assets until a required login has completed.
+  if (auth_state.required && !auth_state.authenticated) return;
+
   // Frontend reads large assets through the R2 guard Worker in production.
   // To test only local files, set this to "" or set window.GEOGUESSER_ASSET_BASE_URL before app.js loads.
   const DEFAULT_ASSET_BASE_URL = "https://vietnam-geoguesser-r2-guard.my-slave.workers.dev";
   const asset_base_url = normalizeAssetBaseUrl(window.GEOGUESSER_ASSET_BASE_URL || DEFAULT_ASSET_BASE_URL);
   const local_only_assets = new Set(["images/placeholder.svg"]);
+  const protected_image_urls = new Map();
+  const created_image_object_urls = new Set();
+  let round_image_request_id = 0;
 
   // Used only when images/locations.js has no real rounds yet.
   const fallback_rounds = [
@@ -137,14 +148,89 @@
     return asset_base_url ? `${asset_base_url}/${clean_path}` : clean_path;
   }
 
+  function isProtectedAssetUrl(url) {
+    return Boolean(
+      asset_base_url &&
+      (url === asset_base_url || url.startsWith(`${asset_base_url}/`))
+    );
+  }
+
+  async function fetchAsset(path, options = {}) {
+    const url = assetUrl(path);
+    const headers = new Headers(options.headers);
+
+    if (isProtectedAssetUrl(url)) {
+      if (typeof window.GEOGUESSER_GET_ACCESS_TOKEN !== "function") {
+        throw new Error("Authentication token provider is unavailable.");
+      }
+
+      const access_token = await window.GEOGUESSER_GET_ACCESS_TOKEN();
+      headers.set("authorization", `Bearer ${access_token}`);
+    }
+
+    return fetch(url, {
+      ...options,
+      headers
+    });
+  }
+
   async function fetchJsonAsset(path) {
-    const response = await fetch(assetUrl(path));
+    const response = await fetchAsset(path);
 
     if (!response.ok) {
       throw new Error(`Could not load ${path}: ${response.status} ${response.statusText}`);
     }
 
     return response.json();
+  }
+
+  function loadRoundImage(path) {
+    const url = assetUrl(path);
+    const request_id = ++round_image_request_id;
+
+    if (!isProtectedAssetUrl(url)) {
+      elements.round_image.src = url;
+      return;
+    }
+
+    elements.image_fallback.classList.remove("hidden");
+
+    let image_url_promise = protected_image_urls.get(url);
+    if (!image_url_promise) {
+      image_url_promise = fetchAsset(path)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Could not load ${path}: ${response.status} ${response.statusText}`);
+          }
+
+          return response.blob();
+        })
+        .then((blob) => {
+          const object_url = URL.createObjectURL(blob);
+          created_image_object_urls.add(object_url);
+          return object_url;
+        })
+        .catch((error) => {
+          protected_image_urls.delete(url);
+          throw error;
+        });
+
+      protected_image_urls.set(url, image_url_promise);
+    }
+
+    image_url_promise
+      .then((object_url) => {
+        if (request_id === round_image_request_id) {
+          elements.round_image.src = object_url;
+        }
+      })
+      .catch((error) => {
+        console.error("Round image load failed:", error);
+        if (request_id === round_image_request_id) {
+          elements.round_image.src = "images/placeholder.svg";
+          elements.image_fallback.classList.remove("hidden");
+        }
+      });
   }
 
   // Converts seconds into the mm:ss text shown in the top bar.
@@ -217,7 +303,7 @@
 
     elements.image_title.textContent = state.revealed ? title : "";
     elements.image_subtitle.textContent = state.revealed ? province : "";
-    elements.round_image.src = assetUrl(round.image || "images/placeholder.svg");
+    loadRoundImage(round.image || "images/placeholder.svg");
     elements.round_image.alt = title;
 
     elements.distance_value.textContent = state.revealed && state.distance !== null
@@ -1498,6 +1584,12 @@
   });
 
   elements.restart_button.addEventListener("click", restartGame);
+
+  window.addEventListener("beforeunload", () => {
+    for (const object_url of created_image_object_urls) {
+      URL.revokeObjectURL(object_url);
+    }
+  });
 
   // Simple round timer. It updates only the timer text to avoid re-rendering every second.
   state.timer_id = window.setInterval(() => {

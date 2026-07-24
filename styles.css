@@ -48,6 +48,196 @@ button:disabled {
   opacity: 0.55;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+.auth-pending .app-shell {
+  visibility: hidden;
+}
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: #dce7ec;
+}
+
+.auth-dialog {
+  width: min(390px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.auth-brand {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 16px;
+  border-radius: 8px;
+  background: var(--red);
+  color: white;
+  font-weight: 900;
+}
+
+.auth-dialog h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.auth-dialog > p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.auth-message {
+  min-height: 1.3em;
+  color: var(--red) !important;
+  font-size: 0.78rem !important;
+}
+
+.account-view {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(24, 38, 47, 0.46);
+}
+
+.account-dialog {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: min(360px, 100%);
+  padding: 28px 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.account-close-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.account-close-button:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  border: 4px solid #dbe7ee;
+  border-radius: 50%;
+  background: var(--blue);
+  color: white;
+  font-size: 1.55rem;
+  font-weight: 900;
+}
+
+.account-heading {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.account-heading span,
+.account-field span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.account-heading h2 {
+  max-width: 280px;
+  margin: 3px 0 0;
+  overflow: hidden;
+  font-size: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-field {
+  width: 100%;
+  margin-top: 20px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7fafb;
+}
+
+.account-field strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 0.92rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-note {
+  margin: 10px 0 18px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.account-logout-button {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #e0b9b7;
+  border-radius: 6px;
+  background: #fff7f6;
+  color: #9e3836;
+  font-weight: 800;
+}
+
+.account-logout-button:hover {
+  border-color: var(--red);
+  background: #fcebea;
+}
+
+.account-message {
+  min-height: 1.2em;
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
 .app-shell {
   /* Two rows: fixed-height top bar and flexible game area. */
   display: grid;
@@ -69,6 +259,53 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 10px 32px rgba(28, 48, 59, 0.1);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 8px;
+}
+
+.auth-user-button {
+  display: flex;
+  align-items: center;
+  min-width: 44px;
+  max-width: 160px;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfc;
+  color: var(--ink);
+}
+
+.auth-user-button:hover {
+  background: #eef4f7;
+}
+
+.auth-user-initials {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--blue);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.auth-user-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand {
@@ -602,6 +839,15 @@ button:disabled {
     gap: 5px;
   }
 
+  .auth-user-button {
+    width: 42px;
+    padding: 5px;
+  }
+
+  .auth-user-name {
+    display: none;
+  }
+
   .metric {
     padding: 6px;
   }
@@ -677,8 +923,13 @@ button:disabled {
     gap: 8px;
   }
 
-  .score-strip {
+  .topbar-actions {
     width: 100%;
+  }
+
+  .score-strip {
+    flex: 1 1 auto;
+    width: auto;
   }
 
   .game-grid {
