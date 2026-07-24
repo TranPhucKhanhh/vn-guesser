@@ -42,14 +42,110 @@
       </div>
     </section>
 
+    <section class="mode-menu" id="modeMenu" aria-labelledby="modeMenuTitle" hidden>
+      <img class="mode-menu-background" src="images/mode-menu-vietnam.jpg" alt="">
+      <div class="mode-menu-shade" aria-hidden="true"></div>
+
+      <header class="mode-menu-topbar">
+        <div class="brand mode-menu-brand">
+          <span class="brand-mark">VN</span>
+          <div>
+            <strong>Vietnam GeoGuesser</strong>
+            <span>Chế độ chơi</span>
+          </div>
+        </div>
+        <button class="auth-user-button mode-menu-user" id="menuAuthUserButton" type="button" aria-label="Mở trang tài khoản" aria-expanded="false" hidden>
+          <span class="auth-user-initials" id="menuAuthUserInitials" aria-hidden="true">U</span>
+          <span class="auth-user-name" id="menuAuthUserName">Người chơi</span>
+        </button>
+      </header>
+
+      <main class="mode-menu-content">
+        <div class="mode-menu-heading">
+          <span>Vietnam GeoGuesser</span>
+          <h1 id="modeMenuTitle">Chọn chế độ chơi</h1>
+          <p>Mỗi chế độ mang một nhịp độ khám phá Việt Nam khác nhau.</p>
+        </div>
+
+        <div class="mode-grid">
+          <button class="mode-card mode-card-available" id="standardMatchButton" type="button">
+            <div class="mode-card-header">
+              <span class="mode-number">01</span>
+              <span class="mode-status mode-status-ready">Sẵn sàng</span>
+            </div>
+            <div>
+              <h2>Standard Match</h2>
+              <p>Tám địa điểm, một hành trình xuyên Việt.</p>
+            </div>
+            <dl class="mode-facts">
+              <div>
+                <dt>Lượt đoán</dt>
+                <dd>8</dd>
+              </div>
+              <div>
+                <dt>Thời gian</dt>
+                <dd>Đếm lên</dd>
+              </div>
+            </dl>
+            <span class="mode-card-action">Bắt đầu <span aria-hidden="true">&rarr;</span></span>
+          </button>
+
+          <article class="mode-card mode-card-disabled" aria-disabled="true">
+            <div class="mode-card-header">
+              <span class="mode-number">02</span>
+              <span class="mode-status">Đang phát triển</span>
+            </div>
+            <div>
+              <h2>Quick Match</h2>
+              <p>Đoán nhiều nhất có thể trước khi hết giờ.</p>
+            </div>
+            <dl class="mode-facts">
+              <div>
+                <dt>Lượt đoán</dt>
+                <dd>Không giới hạn</dd>
+              </div>
+              <div>
+                <dt>Thời gian</dt>
+                <dd>02:00</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="mode-card mode-card-disabled" aria-disabled="true">
+            <div class="mode-card-header">
+              <span class="mode-number">03</span>
+              <span class="mode-status">Đang phát triển</span>
+            </div>
+            <div>
+              <h2>Custom Match</h2>
+              <p>Tự chọn số lượt, thời gian và khu vực.</p>
+            </div>
+            <dl class="mode-facts">
+              <div>
+                <dt>Thiết lập</dt>
+                <dd>Tùy chỉnh</dd>
+              </div>
+              <div>
+                <dt>Người chơi</dt>
+                <dd>Cá nhân</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      </main>
+    </section>
+
     <!-- The whole game is locked to the browser viewport; CSS prevents page scrolling. -->
-    <div class="app-shell">
+    <div class="app-shell" id="gameApp" hidden>
       <!-- Header: persistent game information shown above the play area. -->
       <header class="topbar">
         <div class="brand">
+          <button class="menu-back-button" id="backToMenuButton" type="button" aria-label="Trở về danh sách chế độ" title="Trở về danh sách chế độ">
+            <span aria-hidden="true">&larr;</span>
+          </button>
           <span class="brand-mark">VN</span>
           <div>
-            <h1>Đoán Địa Danh Việt Nam</h1>
+            <h1>Standard Match</h1>
             <p id="roundLocation">Vị trí đang được ẩn</p>
           </div>
         </div>
@@ -63,10 +159,6 @@
             <div class="metric">
               <span>Điểm</span>
               <strong id="scoreValue">0</strong>
-            </div>
-            <div class="metric">
-              <span>Liên tiếp</span>
-              <strong id="streakValue">0</strong>
             </div>
             <div class="metric">
               <span>Giờ</span>
@@ -164,7 +256,6 @@
           <!-- Primary game actions. These currently update placeholder game state. -->
           <section class="action-panel" aria-label="Thao tác chính">
             <button id="submitButton" class="primary-button" type="button">Gửi Dự Đoán</button>
-            <button id="revealButton" class="secondary-button" type="button">Tiết Lộ</button>
             <button id="restartButton" class="ghost-button" type="button">Chơi Lại</button>
           </section>
         </aside>

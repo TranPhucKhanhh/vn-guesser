@@ -14,7 +14,9 @@
   const local_only_assets = new Set(["images/placeholder.svg"]);
   const protected_image_urls = new Map();
   const created_image_object_urls = new Set();
+  const STANDARD_MATCH_ROUND_COUNT = 8;
   let round_image_request_id = 0;
+  let map_initialized = false;
 
   // Used only when images/locations.js has no real rounds yet.
   const fallback_rounds = [
@@ -29,9 +31,10 @@
   ];
 
   // The real data source is window.GEOGUESSER_ROUNDS from images/locations.js.
-  const rounds = Array.isArray(window.GEOGUESSER_ROUNDS) && window.GEOGUESSER_ROUNDS.length
+  const available_rounds = Array.isArray(window.GEOGUESSER_ROUNDS) && window.GEOGUESSER_ROUNDS.length
     ? window.GEOGUESSER_ROUNDS
     : fallback_rounds;
+  const rounds = available_rounds.slice(0, STANDARD_MATCH_ROUND_COUNT);
 
   // Map detail tuning. Larger zoom ratios switch to more detailed geometry.
   const MAP_ORIGINAL_DETAIL_ZOOM_RATIO = 6;
@@ -50,7 +53,6 @@
   const state = {
     round_index: 0,
     score: 0,
-    streak: 0,
     seconds: 0,
     guess_placed: false,
     guess: null,
@@ -101,8 +103,11 @@
     round_location: document.getElementById("roundLocation"),
     round_number: document.getElementById("roundNumber"),
     score_value: document.getElementById("scoreValue"),
-    streak_value: document.getElementById("streakValue"),
     timer_value: document.getElementById("timerValue"),
+    mode_menu: document.getElementById("modeMenu"),
+    game_app: document.getElementById("gameApp"),
+    standard_match_button: document.getElementById("standardMatchButton"),
+    back_to_menu_button: document.getElementById("backToMenuButton"),
     round_image: document.getElementById("roundImage"),
     image_fallback: document.getElementById("imageFallback"),
     image_title: document.getElementById("imageTitle"),
@@ -112,7 +117,6 @@
     place_guess_button: document.getElementById("placeGuessButton"),
     clear_guess_button: document.getElementById("clearGuessButton"),
     submit_button: document.getElementById("submitButton"),
-    reveal_button: document.getElementById("revealButton"),
     restart_button: document.getElementById("restartButton"),
     guess_status: document.getElementById("guessStatus"),
     distance_value: document.getElementById("distanceValue"),
@@ -256,7 +260,6 @@
 
   // Called whenever the player moves to a different round.
   function resetRoundFlags() {
-    state.seconds = 0;
     state.guess_placed = false;
     state.guess = null;
     state.guess_area = null;
@@ -295,7 +298,6 @@
 
     elements.round_number.textContent = `${state.round_index + 1}/${total_rounds}`;
     elements.score_value.textContent = state.score.toLocaleString("en-US");
-    elements.streak_value.textContent = state.streak.toString();
     elements.timer_value.textContent = formatTime(state.seconds);
     elements.round_location.textContent = state.revealed
       ? `${province} (${round.lat}, ${round.lng})`
@@ -313,10 +315,10 @@
       ? state.round_score.toString()
       : "--";
 
-    elements.previous_round_button.disabled = total_rounds <= 1;
-    elements.next_round_button.disabled = total_rounds <= 1;
+    elements.previous_round_button.disabled = state.round_index === 0;
+    elements.next_round_button.disabled =
+      !state.revealed || state.round_index === total_rounds - 1;
     renderGuessControls();
-    elements.reveal_button.disabled = state.revealed;
   }
 
   function renderGuessControls() {
@@ -1495,12 +1497,14 @@
         guess: state.guess,
         guess_area: state.guess_area,
         distance: state.distance,
-        round_score: state.round_score,
-        seconds: state.seconds
+        round_score: state.round_score
       });
     }
 
-    state.round_index = (index + rounds.length) % rounds.length;
+    const next_index = Math.max(0, Math.min(index, rounds.length - 1));
+    if (next_index === state.round_index) return;
+
+    state.round_index = next_index;
 
     const cached = state.results_cache.get(state.round_index);
     if (cached) {
@@ -1508,7 +1512,6 @@
       state.guess_area = cached.guess_area;
       state.distance = cached.distance;
       state.round_score = cached.round_score;
-      state.seconds = cached.seconds;
       state.guess_placed = !!cached.guess;
       state.guess_lookup_id += 1;
       state.revealed = true;
@@ -1527,19 +1530,75 @@
     state.distance = haversineDistance(state.guess.lat, state.guess.lng, round.lat, round.lng);
     state.round_score = calculateScore(state.distance);
     state.score += state.round_score;
-    state.streak += 1;
     state.revealed = true;
+    state.results_cache.set(state.round_index, {
+      guess: state.guess,
+      guess_area: state.guess_area,
+      distance: state.distance,
+      round_score: state.round_score
+    });
+
+    if (state.round_index === rounds.length - 1) {
+      stopMatchTimer();
+    }
+
     render();
     requestMapDraw();
   }
 
   function restartGame() {
+    stopMatchTimer();
     state.round_index = 0;
     state.score = 0;
-    state.streak = 0;
+    state.seconds = 0;
     state.results_cache.clear();
     resetRoundFlags();
+    startMatchTimer();
     render();
+    requestMapDraw();
+  }
+
+  function startMatchTimer() {
+    stopMatchTimer();
+    state.timer_id = window.setInterval(() => {
+      state.seconds += 1;
+      elements.timer_value.textContent = formatTime(state.seconds);
+    }, 1000);
+  }
+
+  function stopMatchTimer() {
+    if (state.timer_id !== null) {
+      window.clearInterval(state.timer_id);
+      state.timer_id = null;
+    }
+  }
+
+  function startStandardMatch() {
+    elements.mode_menu.hidden = true;
+    elements.game_app.hidden = false;
+    restartGame();
+
+    if (!map_initialized) {
+      map_initialized = true;
+      setupMap();
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      resizeMapCanvas();
+      if (map_state.features.length) {
+        fitMapToCanvas();
+        updateMapCenterReadout();
+        updateGuessMarkerPosition();
+        requestMapDraw();
+      }
+    });
+  }
+
+  function showModeMenu() {
+    stopMatchTimer();
+    elements.game_app.hidden = true;
+    elements.mode_menu.hidden = false;
   }
 
   elements.round_image.addEventListener("load", () => {
@@ -1574,16 +1633,9 @@
 
   elements.submit_button.addEventListener("click", submitGuess);
 
-  elements.reveal_button.addEventListener("click", () => {
-    if (state.revealed) return;
-    state.revealed = true;
-    state.round_score = 0;
-    state.distance = null;
-    render();
-    requestMapDraw();
-  });
-
   elements.restart_button.addEventListener("click", restartGame);
+  elements.standard_match_button.addEventListener("click", startStandardMatch);
+  elements.back_to_menu_button.addEventListener("click", showModeMenu);
 
   window.addEventListener("beforeunload", () => {
     for (const object_url of created_image_object_urls) {
@@ -1591,17 +1643,6 @@
     }
   });
 
-  // Simple round timer. It updates only the timer text to avoid re-rendering every second.
-  state.timer_id = window.setInterval(() => {
-    state.seconds += 1;
-    elements.timer_value.textContent = formatTime(state.seconds);
-  }, 1000);
-
-  // Future map hook:
-  // 1. Add an SVG/canvas inside .map-surface in index.html.
-  // 2. Load database/provinces.geojson here.
-  // 3. Convert [lng, lat] coordinates into screen x/y.
-  // 4. On map click, store state.guess = { lat, lng } and set guess_placed = true.
-  render();
-  setupMap();
+  // The authenticated user starts on the mode menu. Map data and the timer
+  // remain idle until Standard Match is selected.
 })();

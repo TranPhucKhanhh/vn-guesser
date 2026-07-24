@@ -9,6 +9,11 @@
     user_button: document.getElementById("authUserButton"),
     user_initials: document.getElementById("authUserInitials"),
     user_name: document.getElementById("authUserName"),
+    menu: document.getElementById("modeMenu"),
+    game: document.getElementById("gameApp"),
+    menu_user_button: document.getElementById("menuAuthUserButton"),
+    menu_user_initials: document.getElementById("menuAuthUserInitials"),
+    menu_user_name: document.getElementById("menuAuthUserName"),
     account_view: document.getElementById("accountView"),
     account_close_button: document.getElementById("accountCloseButton"),
     account_avatar_initials: document.getElementById("accountAvatarInitials"),
@@ -19,6 +24,7 @@
   };
 
   let auth_client = null;
+  let last_account_trigger = null;
 
   window.GEOGUESSER_GET_ACCESS_TOKEN = getAccessToken;
   window.GEOGUESSER_AUTH_READY = initializeAuth();
@@ -128,6 +134,8 @@
 
   function showGame() {
     elements.gate.hidden = true;
+    elements.menu.hidden = false;
+    elements.game.hidden = true;
     document.body.classList.remove("auth-pending");
   }
 
@@ -153,6 +161,10 @@
     elements.user_name.textContent = display_name;
     elements.user_button.title = `${display_name} - Tài khoản`;
     elements.user_button.hidden = false;
+    elements.menu_user_initials.textContent = initials;
+    elements.menu_user_name.textContent = display_name;
+    elements.menu_user_button.title = `${display_name} - Tài khoản`;
+    elements.menu_user_button.hidden = false;
     elements.account_avatar_initials.textContent = initials;
     elements.account_title.textContent = display_name;
     elements.account_username.textContent = display_name;
@@ -178,9 +190,11 @@
       .toUpperCase() || "U";
   }
 
-  function openAccountView() {
+  function openAccountView(event) {
+    last_account_trigger = event.currentTarget;
     elements.account_view.hidden = false;
     elements.user_button.setAttribute("aria-expanded", "true");
+    elements.menu_user_button.setAttribute("aria-expanded", "true");
     elements.account_message.textContent = "";
     elements.account_close_button.focus();
   }
@@ -188,7 +202,8 @@
   function closeAccountView() {
     elements.account_view.hidden = true;
     elements.user_button.setAttribute("aria-expanded", "false");
-    elements.user_button.focus();
+    elements.menu_user_button.setAttribute("aria-expanded", "false");
+    last_account_trigger?.focus();
   }
 
   async function redirectToAuth(screen_hint) {
@@ -227,6 +242,7 @@
   });
 
   elements.user_button.addEventListener("click", openAccountView);
+  elements.menu_user_button.addEventListener("click", openAccountView);
   elements.account_close_button.addEventListener("click", closeAccountView);
 
   elements.account_view.addEventListener("click", (event) => {
