@@ -135,6 +135,22 @@
       </main>
     </section>
 
+    <section class="match-preparation" id="matchPreparation" aria-labelledby="preparationTitle" hidden>
+      <div class="preparation-dialog" role="dialog" aria-modal="true">
+        <span class="preparation-mark" aria-hidden="true">VN</span>
+        <h2 id="preparationTitle">Chuẩn bị trận đấu</h2>
+        <p id="preparationStatus" role="status">Đang tạo trận đấu...</p>
+        <div class="preparation-progress-row">
+          <progress id="preparationProgress" max="100" value="0"></progress>
+          <strong id="preparationCount"></strong>
+        </div>
+        <div class="preparation-actions">
+          <button class="primary-button" id="preparationRetryButton" type="button" hidden>Thử lại</button>
+          <button class="ghost-button" id="preparationCancelButton" type="button">Hủy</button>
+        </div>
+      </div>
+    </section>
+
     <!-- The whole game is locked to the browser viewport; CSS prevents page scrolling. -->
     <div class="app-shell" id="gameApp" hidden>
       <!-- Header: persistent game information shown above the play area. -->
@@ -174,7 +190,7 @@
 
       <!-- Main game area: left side is the image, right side is map + controls. -->
       <main class="game-grid">
-        <!-- Static round image. Later, images/locations.js decides which file appears here. -->
+        <!-- Round images arrive through authenticated, opaque Worker endpoints. -->
         <section class="photo-panel" aria-label="Ảnh vòng chơi">
           <div class="photo-frame">
             <img id="roundImage" alt="Địa điểm của vòng hiện tại">
@@ -189,7 +205,7 @@
             </button>
             <div class="photo-meta">
               <strong id="imageTitle">Đang chờ ảnh</strong>
-              <span id="imageSubtitle">Thêm vòng trong images/locations.js</span>
+              <span id="imageSubtitle">Vị trí đang được ẩn</span>
             </div>
             <button class="icon-button" id="nextRoundButton" type="button" aria-label="Vòng sau">
               <span aria-hidden="true">&rsaquo;</span>
@@ -266,8 +282,6 @@
     <script src="https://cdn.auth0.com/js/auth0-spa-js/2.18/auth0-spa-js.production.js"></script>
     <script src="auth-config.js"></script>
     <script src="auth.js"></script>
-    <!-- locations.js must load before app.js so window.GEOGUESSER_ROUNDS exists. -->
-    <script src="images/locations.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

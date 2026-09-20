@@ -12,29 +12,17 @@
   const DEFAULT_ASSET_BASE_URL = "https://vietnam-geoguesser-r2-guard.my-slave.workers.dev";
   const asset_base_url = normalizeAssetBaseUrl(window.GEOGUESSER_ASSET_BASE_URL || DEFAULT_ASSET_BASE_URL);
   const local_only_assets = new Set(["images/placeholder.svg"]);
-  const protected_image_urls = new Map();
+  const round_image_cache = new Map();
   const created_image_object_urls = new Set();
   const STANDARD_MATCH_ROUND_COUNT = 8;
+  const IMAGE_PRELOAD_CONCURRENCY = 3;
+  const DECODE_AHEAD_COUNT = 2;
+  const rounds = [];
   let round_image_request_id = 0;
+  let round_image_generation = 0;
   let map_initialized = false;
-
-  // Used only when images/locations.js has no real rounds yet.
-  const fallback_rounds = [
-    {
-      id: "sample-1",
-      title: "Vòng mẫu",
-      province: "Việt Nam",
-      image: "images/placeholder.svg",
-      lat: 21.0278,
-      lng: 105.8342
-    }
-  ];
-
-  // The real data source is window.GEOGUESSER_ROUNDS from images/locations.js.
-  const available_rounds = Array.isArray(window.GEOGUESSER_ROUNDS) && window.GEOGUESSER_ROUNDS.length
-    ? window.GEOGUESSER_ROUNDS
-    : fallback_rounds;
-  const rounds = available_rounds.slice(0, STANDARD_MATCH_ROUND_COUNT);
+  let map_load_promise = null;
+  let preparation_run_id = 0;
 
   // Map detail tuning. Larger zoom ratios switch to more detailed geometry.
   const MAP_ORIGINAL_DETAIL_ZOOM_RATIO = 6;
@@ -62,7 +50,10 @@
     distance: null,
     round_score: null,
     results_cache: new Map(),
-    timer_id: null
+    timer_id: null,
+    match_id: null,
+    match_started_at: null,
+    submitting_guess: false
   };
 
   // Single source for storing the whole viewing map data
@@ -130,7 +121,13 @@
     map_info_area: document.getElementById("mapInfoArea"),
     map_info_type: document.getElementById("mapInfoType"),
     map_hover_tooltip: document.getElementById("mapHoverTooltip"),
-    map_guess_marker: document.getElementById("mapGuessMarker")
+    map_guess_marker: document.getElementById("mapGuessMarker"),
+    preparation: document.getElementById("matchPreparation"),
+    preparation_status: document.getElementById("preparationStatus"),
+    preparation_progress: document.getElementById("preparationProgress"),
+    preparation_count: document.getElementById("preparationCount"),
+    preparation_retry_button: document.getElementById("preparationRetryButton"),
+    preparation_cancel_button: document.getElementById("preparationCancelButton")
   };
 
   function currentRound() {
@@ -188,48 +185,150 @@
     return response.json();
   }
 
-  function loadRoundImage(path) {
-    const url = assetUrl(path);
-    const request_id = ++round_image_request_id;
+  async function fetchApiJson(path, options = {}) {
+    const headers = new Headers(options.headers);
+    headers.set("content-type", "application/json");
+    const response = await fetchAsset(path, { ...options, headers });
+    const payload = await response.json().catch(() => ({}));
 
-    if (!isProtectedAssetUrl(url)) {
-      elements.round_image.src = url;
+    if (!response.ok) {
+      throw new Error(payload.error || `Request failed: ${response.status} ${response.statusText}`);
+    }
+
+    return payload;
+  }
+
+  function preferredRoundImageWidth() {
+    const frame_width = elements.round_image.parentElement?.getBoundingClientRect().width || window.innerWidth;
+    const required_width = frame_width * Math.min(window.devicePixelRatio || 1, 2);
+    return required_width <= 1280 ? "1280" : "1920";
+  }
+
+  function roundImagePath(round) {
+    const separator = round.image_path.includes("?") ? "&" : "?";
+    return `${round.image_path}${separator}size=${round.image_width || preferredRoundImageWidth()}`;
+  }
+
+  async function fetchRoundImage(round) {
+    const path = roundImagePath(round);
+    const generation = round_image_generation;
+    let entry = round_image_cache.get(path);
+    if (entry?.object_url) return entry;
+    if (entry?.fetch_promise) return entry.fetch_promise;
+
+    entry = {
+      path,
+      object_url: null,
+      fetch_promise: null,
+      decoded_image: null,
+      decode_promise: null
+    };
+
+    entry.fetch_promise = fetchAsset(path)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Could not load round image: ${response.status} ${response.statusText}`);
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        if (generation !== round_image_generation) {
+          throw new Error("Round image preload was cancelled.");
+        }
+        entry.object_url = URL.createObjectURL(blob);
+        created_image_object_urls.add(entry.object_url);
+        entry.fetch_promise = null;
+        return entry;
+      })
+      .catch((error) => {
+        round_image_cache.delete(path);
+        throw error;
+      });
+
+    round_image_cache.set(path, entry);
+    return entry.fetch_promise;
+  }
+
+  async function decodeRoundImage(index) {
+    const round = rounds[index];
+    if (!round) return;
+
+    const entry = await fetchRoundImage(round);
+    if (entry.decoded_image) return entry;
+    if (entry.decode_promise) return entry.decode_promise;
+
+    entry.decode_promise = (async () => {
+      const image = new Image();
+      image.src = entry.object_url;
+      await image.decode();
+      entry.decoded_image = image;
+      entry.decode_promise = null;
+      return entry;
+    })().catch((error) => {
+      entry.decode_promise = null;
+      throw error;
+    });
+
+    return entry.decode_promise;
+  }
+
+  async function decodeRoundsAhead(active_index) {
+    const first = Math.max(0, active_index);
+    const last = Math.min(rounds.length - 1, active_index + DECODE_AHEAD_COUNT);
+    await Promise.all(
+      Array.from({ length: last - first + 1 }, (_, offset) => decodeRoundImage(first + offset))
+    );
+    trimDecodedRoundImages(active_index);
+  }
+
+  function trimDecodedRoundImages(active_index) {
+    rounds.forEach((round, index) => {
+      if (index >= active_index - 1 && index <= active_index + DECODE_AHEAD_COUNT) return;
+
+      const entry = round_image_cache.get(roundImagePath(round));
+      if (entry?.decoded_image) {
+        entry.decoded_image.src = "";
+        entry.decoded_image = null;
+      }
+    });
+  }
+
+  async function preloadRoundImages(on_progress) {
+    let next_index = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (next_index < rounds.length) {
+        const index = next_index;
+        next_index += 1;
+        await fetchRoundImage(rounds[index]);
+        completed += 1;
+        on_progress(completed, rounds.length);
+      }
+    }
+
+    const worker_count = Math.min(IMAGE_PRELOAD_CONCURRENCY, rounds.length);
+    await Promise.all(Array.from({ length: worker_count }, () => worker()));
+  }
+
+  function displayCurrentRoundImage() {
+    const round = currentRound();
+    const request_id = ++round_image_request_id;
+    if (!round) return;
+
+    const entry = round_image_cache.get(roundImagePath(round));
+    if (!entry?.object_url) {
+      elements.round_image.src = "images/placeholder.svg";
+      elements.image_fallback.classList.remove("hidden");
       return;
     }
 
-    elements.image_fallback.classList.remove("hidden");
-
-    let image_url_promise = protected_image_urls.get(url);
-    if (!image_url_promise) {
-      image_url_promise = fetchAsset(path)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Could not load ${path}: ${response.status} ${response.statusText}`);
-          }
-
-          return response.blob();
-        })
-        .then((blob) => {
-          const object_url = URL.createObjectURL(blob);
-          created_image_object_urls.add(object_url);
-          return object_url;
-        })
-        .catch((error) => {
-          protected_image_urls.delete(url);
-          throw error;
-        });
-
-      protected_image_urls.set(url, image_url_promise);
-    }
-
-    image_url_promise
-      .then((object_url) => {
-        if (request_id === round_image_request_id) {
-          elements.round_image.src = object_url;
-        }
+    decodeRoundImage(state.round_index)
+      .then(() => {
+        if (request_id === round_image_request_id) elements.round_image.src = entry.object_url;
       })
       .catch((error) => {
-        console.error("Round image load failed:", error);
+        console.error("Round image decode failed:", error);
         if (request_id === round_image_request_id) {
           elements.round_image.src = "images/placeholder.svg";
           elements.image_fallback.classList.remove("hidden");
@@ -237,25 +336,23 @@
       });
   }
 
+  function releaseRoundImages() {
+    round_image_generation += 1;
+    for (const entry of round_image_cache.values()) {
+      if (entry.decoded_image) entry.decoded_image.src = "";
+      if (entry.object_url) {
+        URL.revokeObjectURL(entry.object_url);
+        created_image_object_urls.delete(entry.object_url);
+      }
+    }
+    round_image_cache.clear();
+  }
+
   // Converts seconds into the mm:ss text shown in the top bar.
   function formatTime(total_seconds) {
     const minutes = Math.floor(total_seconds / 60).toString().padStart(2, "0");
     const seconds = (total_seconds % 60).toString().padStart(2, "0");
     return `${minutes}:${seconds}`;
-  }
-
-  function haversineDistance(lat1, lng1, lat2, lng2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  function calculateScore(distance_km) {
-    return Math.max(0, Math.round(5000 * Math.exp(-distance_km / 200)));
   }
 
   // Called whenever the player moves to a different round.
@@ -305,7 +402,7 @@
 
     elements.image_title.textContent = state.revealed ? title : "";
     elements.image_subtitle.textContent = state.revealed ? province : "";
-    loadRoundImage(round.image || "images/placeholder.svg");
+    displayCurrentRoundImage();
     elements.round_image.alt = title;
 
     elements.distance_value.textContent = state.revealed && state.distance !== null
@@ -325,7 +422,7 @@
     elements.guess_status.textContent = getGuessStatusText();
     elements.place_guess_button.disabled = state.revealed;
     elements.clear_guess_button.disabled = !state.guess_placed || state.revealed;
-    elements.submit_button.disabled = !state.guess_placed || state.revealed;
+    elements.submit_button.disabled = !state.guess_placed || state.revealed || state.submitting_guess;
     updateGuessMarkerPosition();
   }
 
@@ -333,7 +430,8 @@
     map_state.canvas = document.getElementById("map-canvas");
     if (!map_state.canvas || !map_state.canvas.getContext) {
       elements.map_status.textContent = "Canvas unavailable";
-      return;
+      map_load_promise = Promise.reject(new Error("Canvas is unavailable."));
+      return map_load_promise;
     }
 
     map_state.ctx = map_state.canvas.getContext("2d");
@@ -353,7 +451,8 @@
     });
     map_state.resize_observer.observe(map_state.canvas.parentElement);
 
-    loadMapData();
+    map_load_promise = loadMapData();
+    return map_load_promise;
   }
 
   function resizeMapCanvas() {
@@ -382,6 +481,7 @@
     } catch (error) {
       console.error(error);
       elements.map_status.textContent = "Khởi động máy chủ để tải dữ liệu";
+      throw error;
     }
   }
 
@@ -1491,23 +1591,29 @@
     return visual_width / map_state.scale;
   }
 
-  function setRound(index) {
+  async function setRound(index) {
     if (state.revealed) {
       state.results_cache.set(state.round_index, {
         guess: state.guess,
         guess_area: state.guess_area,
         distance: state.distance,
-        round_score: state.round_score
+        round_score: state.round_score,
+        answer: answerFromRound(currentRound())
       });
     }
 
     const next_index = Math.max(0, Math.min(index, rounds.length - 1));
     if (next_index === state.round_index) return;
 
+    elements.previous_round_button.disabled = true;
+    elements.next_round_button.disabled = true;
+    await decodeRoundImage(next_index);
+
     state.round_index = next_index;
 
     const cached = state.results_cache.get(state.round_index);
     if (cached) {
+      Object.assign(currentRound(), cached.answer);
       state.guess = cached.guess;
       state.guess_area = cached.guess_area;
       state.distance = cached.distance;
@@ -1521,49 +1627,93 @@
 
     render();
     requestMapDraw();
-  }
-
-  function submitGuess() {
-    if (!state.guess_placed || state.revealed) return;
-
-    const round = currentRound();
-    state.distance = haversineDistance(state.guess.lat, state.guess.lng, round.lat, round.lng);
-    state.round_score = calculateScore(state.distance);
-    state.score += state.round_score;
-    state.revealed = true;
-    state.results_cache.set(state.round_index, {
-      guess: state.guess,
-      guess_area: state.guess_area,
-      distance: state.distance,
-      round_score: state.round_score
+    decodeRoundsAhead(state.round_index).catch((error) => {
+      console.warn("Could not decode later rounds:", error);
     });
-
-    if (state.round_index === rounds.length - 1) {
-      stopMatchTimer();
-    }
-
-    render();
-    requestMapDraw();
   }
 
-  function restartGame() {
+  async function submitGuess() {
+    if (!state.guess_placed || state.revealed || state.submitting_guess) return;
+
+    state.submitting_guess = true;
+    renderGuessControls();
+    let submission_error = "";
+
+    try {
+      const payload = await fetchApiJson(
+        `api/matches/${encodeURIComponent(state.match_id)}/rounds/${state.round_index}/guess`,
+        {
+          method: "POST",
+          body: JSON.stringify({ guess: state.guess })
+        }
+      );
+      const result = payload.result;
+      Object.assign(currentRound(), {
+        title: result.title,
+        province: result.province,
+        lat: result.lat,
+        lng: result.lng
+      });
+      state.distance = result.distance;
+      state.round_score = result.roundScore;
+      state.score = result.totalScore;
+      state.revealed = true;
+      state.results_cache.set(state.round_index, {
+        guess: state.guess,
+        guess_area: state.guess_area,
+        distance: state.distance,
+        round_score: state.round_score,
+        answer: answerFromRound(currentRound())
+      });
+
+      if (payload.finished) stopMatchTimer();
+      render();
+      requestMapDraw();
+      decodeRoundsAhead(state.round_index + 1).catch((error) => {
+        console.warn("Could not decode later rounds:", error);
+      });
+    } catch (error) {
+      console.error("Guess submission failed:", error);
+      submission_error = "Không thể gửi dự đoán. Hãy thử lại.";
+    } finally {
+      state.submitting_guess = false;
+      renderGuessControls();
+      if (submission_error) elements.guess_status.textContent = submission_error;
+    }
+  }
+
+  function answerFromRound(round) {
+    return {
+      title: round.title,
+      province: round.province,
+      lat: round.lat,
+      lng: round.lng
+    };
+  }
+
+  function resetGameState() {
     stopMatchTimer();
     state.round_index = 0;
     state.score = 0;
     state.seconds = 0;
     state.results_cache.clear();
+    state.submitting_guess = false;
     resetRoundFlags();
-    startMatchTimer();
-    render();
-    requestMapDraw();
   }
 
   function startMatchTimer() {
     stopMatchTimer();
-    state.timer_id = window.setInterval(() => {
-      state.seconds += 1;
+    const local_started_at = Date.now();
+
+    function updateTimer() {
+      state.seconds = Math.floor((Date.now() - local_started_at) / 1000);
       elements.timer_value.textContent = formatTime(state.seconds);
-    }, 1000);
+    }
+
+    updateTimer();
+    state.timer_id = window.setInterval(() => {
+      updateTimer();
+    }, 250);
   }
 
   function stopMatchTimer() {
@@ -1573,30 +1723,118 @@
     }
   }
 
-  function startStandardMatch() {
+  async function startStandardMatch() {
+    const run_id = ++preparation_run_id;
+    resetGameState();
+    releaseRoundImages();
+    rounds.splice(0, rounds.length);
+    state.match_id = null;
+    state.match_started_at = null;
+
     elements.mode_menu.hidden = true;
     elements.game_app.hidden = false;
-    restartGame();
+    showPreparation("Đang tạo trận đấu...", 0, STANDARD_MATCH_ROUND_COUNT);
+    elements.standard_match_button.disabled = true;
 
+    try {
+      const map_ready = ensureMapReady();
+      const [match] = await Promise.all([
+        fetchApiJson("api/matches", {
+          method: "POST",
+          body: JSON.stringify({ mode: "standard" })
+        }),
+        map_ready
+      ]);
+      if (run_id !== preparation_run_id) return;
+
+      state.match_id = match.matchId;
+      const image_width = preferredRoundImageWidth();
+      rounds.push(
+        ...match.rounds.slice(0, STANDARD_MATCH_ROUND_COUNT).map((round) => ({
+          index: round.index,
+          image_path: round.imagePath,
+          image_width
+        }))
+      );
+
+      showPreparation("Đang tải ảnh cho trận đấu...", 0, rounds.length);
+      await Promise.all([
+        preloadRoundImages((completed, total) => {
+          if (run_id === preparation_run_id) {
+            showPreparation("Đang tải ảnh cho trận đấu...", completed, total);
+          }
+        }),
+        decodeRoundsAhead(0)
+      ]);
+      if (run_id !== preparation_run_id) return;
+
+      showPreparation("Đang hoàn tất...", rounds.length, rounds.length);
+      const ready = await fetchApiJson(
+        `api/matches/${encodeURIComponent(state.match_id)}/ready`,
+        { method: "POST", body: "{}" }
+      );
+      if (run_id !== preparation_run_id) return;
+
+      state.match_started_at = ready.startedAt;
+      hidePreparation();
+      render();
+      requestMapDraw();
+      startMatchTimer();
+    } catch (error) {
+      if (run_id !== preparation_run_id) return;
+      console.error("Match preparation failed:", error);
+      showPreparationError(error.message || "Không thể chuẩn bị trận đấu.");
+    } finally {
+      if (run_id === preparation_run_id) elements.standard_match_button.disabled = false;
+    }
+  }
+
+  function ensureMapReady() {
     if (!map_initialized) {
       map_initialized = true;
-      setupMap();
-      return;
+      return setupMap();
     }
 
-    window.requestAnimationFrame(() => {
-      resizeMapCanvas();
-      if (map_state.features.length) {
-        fitMapToCanvas();
-        updateMapCenterReadout();
-        updateGuessMarkerPosition();
-        requestMapDraw();
-      }
-    });
+    resizeMapCanvas();
+    if (map_state.features.length) {
+      fitMapToCanvas();
+      updateMapCenterReadout();
+      updateGuessMarkerPosition();
+      requestMapDraw();
+      return Promise.resolve();
+    }
+
+    map_load_promise = loadMapData();
+    return map_load_promise;
+  }
+
+  function showPreparation(message, completed, total) {
+    const progress = total ? Math.round((completed / total) * 100) : 0;
+    elements.preparation.hidden = false;
+    elements.preparation_status.textContent = message;
+    elements.preparation_progress.value = progress;
+    elements.preparation_count.textContent = total ? `${completed}/${total}` : "";
+    elements.preparation_retry_button.hidden = true;
+  }
+
+  function showPreparationError(message) {
+    elements.preparation.hidden = false;
+    elements.preparation_status.textContent = message;
+    elements.preparation_retry_button.hidden = false;
+  }
+
+  function hidePreparation() {
+    elements.preparation.hidden = true;
+    elements.preparation_retry_button.hidden = true;
   }
 
   function showModeMenu() {
+    preparation_run_id += 1;
     stopMatchTimer();
+    hidePreparation();
+    releaseRoundImages();
+    rounds.splice(0, rounds.length);
+    state.match_id = null;
     elements.game_app.hidden = true;
     elements.mode_menu.hidden = false;
   }
@@ -1610,11 +1848,11 @@
   });
 
   elements.previous_round_button.addEventListener("click", () => {
-    setRound(state.round_index - 1);
+    setRound(state.round_index - 1).catch((error) => console.error("Round change failed:", error));
   });
 
   elements.next_round_button.addEventListener("click", () => {
-    setRound(state.round_index + 1);
+    setRound(state.round_index + 1).catch((error) => console.error("Round change failed:", error));
   });
 
   elements.place_guess_button.addEventListener("click", () => {
@@ -1633,14 +1871,14 @@
 
   elements.submit_button.addEventListener("click", submitGuess);
 
-  elements.restart_button.addEventListener("click", restartGame);
+  elements.restart_button.addEventListener("click", startStandardMatch);
   elements.standard_match_button.addEventListener("click", startStandardMatch);
   elements.back_to_menu_button.addEventListener("click", showModeMenu);
+  elements.preparation_retry_button.addEventListener("click", startStandardMatch);
+  elements.preparation_cancel_button.addEventListener("click", showModeMenu);
 
   window.addEventListener("beforeunload", () => {
-    for (const object_url of created_image_object_urls) {
-      URL.revokeObjectURL(object_url);
-    }
+    releaseRoundImages();
   });
 
   // The authenticated user starts on the mode menu. Map data and the timer

@@ -1,0 +1,19 @@
+{
+  "name": "vn-guesser",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "optimize:rounds": "node tools/prepare-round-assets.mjs",
+    "upload:rounds": "node tools/upload-round-assets.mjs",
+    "check:worker": "wrangler deploy --dry-run --config worker/wrangler.toml --outdir .wrangler-build",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.4",
+    "wrangler": "^4.0.0"
+  }
+}

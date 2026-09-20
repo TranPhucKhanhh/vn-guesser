@@ -1,0 +1,6 @@
+node_modules/
+.private/
+.r2-upload/
+.wrangler/
+.wrangler-build/
+

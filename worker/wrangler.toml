@@ -1,0 +1,35 @@
+name = "vietnam-geoguesser-r2-guard"
+main = "worker.js"
+compatibility_date = "2026-09-20"
+workers_dev = true
+preview_urls = false
+
+[vars]
+CF_ACCOUNT_ID = "5bdd6f90b432075d438cf09728f8b576"
+R2_BUCKET_NAME = "vietnam-map-data"
+CLASS_A_MONTHLY_LIMIT = "1000000"
+CLASS_A_BLOCK_RATIO = "0.95"
+CLASS_B_MONTHLY_LIMIT = "10000000"
+CLASS_B_BLOCK_RATIO = "0.95"
+USAGE_CACHE_SECONDS = "300"
+JWKS_CACHE_SECONDS = "3600"
+ROUND_CATALOG_KEY = "private/round-catalog.v1.json"
+ROUND_CATALOG_CACHE_SECONDS = "300"
+STANDARD_MATCH_ROUND_COUNT = "8"
+MATCH_LIFETIME_SECONDS = "86400"
+AUTH0_ISSUER = "https://phuc-khanh.jp.auth0.com/"
+AUTH0_AUDIENCE = "https://vietnam-geoguesser-r2-guard.my-slave.workers.dev"
+ALLOWED_ORIGINS = "https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080"
+
+[[r2_buckets]]
+binding = "DATA_BUCKET"
+bucket_name = "vietnam-map-data"
+
+[[durable_objects.bindings]]
+name = "MATCHES"
+class_name = "MatchSession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MatchSession"]
+

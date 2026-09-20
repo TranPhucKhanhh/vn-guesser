@@ -1,161 +1,161 @@
-# Vietnam GeoGuesser Project Notes
-# The CF_API_TOKEN can expire. Check it monthly and update the Worker secret before its expiry date.
+# Vietnam GeoGuesser Deployment
 
-## Project
-
-This is a static browser game for guessing locations in Vietnam. The frontend is plain HTML, CSS, and JavaScript:
-
-- `index.html`: page structure
-- `styles.css`: layout and visual design
-- `app.js`: game logic, canvas map drawing, map interaction, scoring, and R2 asset loading
-- `auth-config.js`: public Auth0 application configuration
-- `auth.js`: login, signup, logout, and session startup
-- `images/locations.js`: round list with image paths and answer coordinates
-- `polygon-clipping/`: local helper library used by the map work
-
-Large map/image assets should not be deployed with the frontend repo.
-
-## Data
-
-Large assets are stored in Cloudflare R2 bucket:
-
-```text
-vietnam-map-data
-```
-
-Expected R2 object keys:
-
-```text
-provinces.geojson
-special.geojson
-wards/01.geojson
-wards/04.geojson
-images/rounds/hanoi.jpg
-```
-
-The frontend uses the same path strings, then `app.js` prepends the Worker URL.
-
-## Deployment Architecture
+## Architecture
 
 ```text
 Browser
   |
-  | loads website
+  | Auth0 access token
   v
-Cloudflare Pages
-  |
-  | fetches map data/images
-  v
-Cloudflare Worker: vietnam-geoguesser-r2-guard
-  |
-  | checks R2 Class A and Class B usage limits
+Cloudflare Worker
+  |-- Durable Object: match order, active round, score, expiry
+  |-- R2 binding: maps, wards, private image catalog, WebP images
   v
 Cloudflare R2: vietnam-map-data
 ```
 
-Cloudflare Pages hosts only the small frontend files. Cloudflare R2 stores the large GeoJSON and image files. The Worker is the only public read gateway to R2, so it blocks reads when either configured operation threshold is reached.
+Cloudflare Pages hosts only the public HTML, CSS, JavaScript, menu image, and placeholder. It does not contain round coordinates, province answers, semantic round filenames, or scoring logic.
 
-The Worker only accepts `GET` and `HEAD`, which are Class B operations. Class A operations are writes and lists performed through the Dashboard, Wrangler, the S3 API, or another Worker. The guard can monitor those operations, but it cannot stop a Class A request that bypasses this Worker. Keep public credentials read-only and route any future writes through a guarded endpoint.
+The Worker source is in `worker/worker.js`. Its configuration is `worker/wrangler.toml`.
 
-## Worker
+## Match API
 
-Worker file:
-
-```text
-cloudflare-r2-class-b-guard-worker.js
-```
-
-Wrangler config:
+Authenticated frontend requests use these endpoints:
 
 ```text
-wrangler.toml
+POST /api/matches
+POST /api/matches/{matchId}/ready
+GET  /api/round-images/{opaqueAssetId}?size=1280
+POST /api/matches/{matchId}/rounds/{roundIndex}/guess
 ```
 
-Important config:
+`POST /api/matches` selects eight rounds and creates one SQLite-backed Durable Object. The browser receives only opaque image IDs. The correct title, province, coordinates, distance, and score are returned after a valid one-time guess.
+
+The Durable Object binds each match to the Auth0 `sub`, enforces round order, rejects replayed submissions, and deletes the match after 24 hours.
+
+Direct R2 access through the Worker is limited to:
+
+```text
+provinces.geojson
+special.geojson
+wards/{provinceCode}.geojson
+```
+
+All `private/` and `images/` keys are rejected by the generic object route.
+
+## Private Round Data
+
+The local source manifest is:
+
+```text
+.private/rounds.json
+```
+
+This file is intentionally ignored by Git. It contains the answer coordinates and the original image filename. Do not move it into a tracked or Pages-hosted directory.
+
+Original photographs remain outside this repository:
+
+```text
+..\images\rounds\
+```
+
+The optimizer creates ignored upload artifacts in `.r2-upload/`:
+
+```text
+.r2-upload/private/round-catalog.v1.json
+.r2-upload/private/round-images/{opaqueId}-1280-{hash}.webp
+.r2-upload/private/round-images/{opaqueId}-1920-{hash}.webp
+```
+
+The content hash changes the URL whenever image bytes change, so immutable browser caching remains correct.
+
+## Prepare Images
+
+Open Command Prompt in this repository:
+
+```cmd
+cd /d D:\project\other\geoguesser-me-code\vn-guesser
+npm install
+npm run optimize:rounds
+```
+
+Sharp rotates from EXIF orientation, strips unnecessary metadata, resizes without enlargement, and generates quality-80 WebP files at 1280px and 1920px.
+
+Upload the generated images and private catalog:
+
+```cmd
+npm run upload:rounds
+```
+
+The upload script targets `vietnam-map-data`. Override it for another bucket with:
+
+```cmd
+set R2_BUCKET_NAME=another-bucket
+npm run upload:rounds
+```
+
+## Worker Configuration
+
+Important non-secret variables are in `worker/wrangler.toml`:
 
 ```toml
-CLASS_A_MONTHLY_LIMIT = "1000000"
-CLASS_A_BLOCK_RATIO = "0.95"
-CLASS_B_MONTHLY_LIMIT = "10000000"
-CLASS_B_BLOCK_RATIO = "0.95"
-USAGE_CACHE_SECONDS = "300"
-ALLOWED_ORIGINS = "https://vn-guesser.pages.dev,http://localhost:8080"
+ROUND_CATALOG_KEY = "private/round-catalog.v1.json"
+STANDARD_MATCH_ROUND_COUNT = "8"
+MATCH_LIFETIME_SECONDS = "86400"
+ALLOWED_ORIGINS = "https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080"
 ```
 
-The API token is stored as a Worker secret named:
+The existing secret must remain configured on the Worker:
 
 ```text
-CF_API_TOKEN WHICH CAN EXPIRED AROUND OCTOBER 2026
+CF_API_TOKEN
 ```
 
-It must not be committed into code.
+Update it from Command Prompt without placing its value in a file:
 
-## Authentication
-
-The frontend uses Auth0 Universal Login. One Auth0 application can provide username/password accounts plus Google and Facebook login without storing passwords in this project. Auth0 access tokens also authorize every protected R2 Worker request.
-
-Authentication is enabled in `auth-config.js` with the Auth0 Domain, public Client ID, and API audience. These identifiers are safe to expose in a browser application. Never add an Auth0 Client Secret or Google Client Secret to this repository.
-
-Create an Auth0 API under **Applications > APIs > Create API**:
-
-```text
-Name: Vietnam GeoGuesser R2 API
-Identifier: https://vietnam-geoguesser-r2-guard.my-slave.workers.dev
-Signing Algorithm: RS256
+```cmd
+npx wrangler secret put CF_API_TOKEN --config worker\wrangler.toml
 ```
 
-The Identifier must exactly match `audience` in `auth-config.js` and `AUTH0_AUDIENCE` in the Worker `wrangler.toml`.
+## Verification
 
-Configure the Auth0 Single Page Application with these values:
+Run the unit tests, regenerate assets, and validate the Worker bundle:
 
-```text
-Allowed Callback URLs:
-https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080
-
-Allowed Logout URLs:
-https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080
-
-Allowed Web Origins:
-https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080
+```cmd
+npm test
+npm run optimize:rounds
+npm run check:worker
 ```
 
-Enable the Auth0 database connection for username/password accounts. Enable Google and Facebook under Auth0 social connections when needed. The login screen is hosted by Auth0, while the game shows a small account/logout control after authentication.
+The Worker dry run verifies the R2 and Durable Object bindings without deploying.
 
-After login, the frontend obtains an in-memory access token and sends it as `Authorization: Bearer <token>` for GeoJSON and R2 image requests. The Worker verifies the Auth0 RS256 signature, issuer, audience, subject, and token lifetime before reading R2. `/health` remains public, while `/usage` and all R2 objects require authentication.
+## Deployment Order
 
-The Worker authentication variables are non-secret:
+1. Upload the optimized private R2 assets.
+2. Deploy the Worker containing the match API and Durable Object migration.
+3. Push the frontend commit so Cloudflare Pages deploys it.
 
-```toml
-AUTH0_ISSUER = "https://phuc-khanh.jp.auth0.com/"
-AUTH0_AUDIENCE = "https://vietnam-geoguesser-r2-guard.my-slave.workers.dev"
-JWKS_CACHE_SECONDS = "3600"
+Commands:
+
+```cmd
+cd /d D:\project\other\geoguesser-me-code\vn-guesser
+npm run upload:rounds
+npx wrangler deploy --config worker\wrangler.toml
+git push origin main
 ```
 
-## Deploy Commands
+Deploying the Worker with the same service name keeps the existing `CF_API_TOKEN` secret. The first deployment creates the SQLite-backed `MatchSession` Durable Object namespace.
 
-Deploy Worker:
+## Caching Behavior
 
-```bash
-npx wrangler deploy
-```
+The preparation screen downloads all selected compressed images with three concurrent requests. It decodes only the active round and two rounds ahead. The timer starts after the map, images, and initial decoded window are ready.
 
-Create the Auth0 API before deploying the protected frontend. Then deploy the Worker and push this repository so Cloudflare Pages publishes the frontend.
+Round image responses use a one-year private immutable browser cache. Stable opaque asset URLs allow reuse in later matches. The Worker also uses Cloudflare's Cache API after authentication; R2 edge caching requires a custom domain or Worker route because it has no effect on `*.workers.dev`.
 
-Set/update Worker secret:
+Wards remain lazy-loaded by selected province and zoom level. They are never preloaded with a match.
 
-```bash
-npx wrangler secret put CF_API_TOKEN
-```
+## Security Boundary
 
-Test Worker:
+Players can always inspect photographs downloaded by their browser. They cannot obtain answer coordinates from the frontend bundle, image URLs, or match-creation response. Auth0 protects the API, and scoring happens only inside the match Durable Object.
 
-```text
-https://vietnam-geoguesser-r2-guard.my-slave.workers.dev/health
-https://vietnam-geoguesser-r2-guard.my-slave.workers.dev/usage
-```
-
-`/health` should work without a token. Opening `/usage` or an object URL directly should return HTTP 401. Requests made by the authenticated game should succeed.
-
-`/usage` reports separate `classA` and `classB` counters. Its `blocked` value becomes `true` when either threshold is reached. Analytics can be delayed, so this is a safety guard rather than a guaranteed billing hard cap.
-
-Cloudflare Pages deploys the frontend from the private GitHub repo.
+Never commit `.private/`, `.r2-upload/`, Auth0 client secrets, Google/Facebook client secrets, or `CF_API_TOKEN`.
