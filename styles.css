@@ -312,6 +312,81 @@ button:disabled {
   flex: 1 1 0;
 }
 
+.match-complete {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(20, 36, 44, 0.76);
+}
+
+.match-complete-dialog {
+  width: min(360px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.match-complete-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 13px;
+  border-radius: 8px;
+  background: var(--green);
+  color: white;
+  font-weight: 900;
+}
+
+.match-complete-dialog h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.match-complete-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 18px 0 14px;
+}
+
+.match-complete-stats div {
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7fafb;
+}
+
+.match-complete-stats span,
+.match-complete-stats strong {
+  display: block;
+}
+
+.match-complete-stats span,
+.match-complete-dialog > p {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.match-complete-stats strong {
+  margin-top: 4px;
+  font-size: 1.05rem;
+}
+
+.match-complete-dialog > p {
+  margin: 0 0 16px;
+}
+
+.match-complete-dialog > .primary-button {
+  width: 100%;
+}
+
 .mode-menu {
   position: relative;
   isolation: isolate;

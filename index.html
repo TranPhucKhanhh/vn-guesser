@@ -151,6 +151,25 @@
       </div>
     </section>
 
+    <section class="match-complete" id="matchComplete" aria-labelledby="matchCompleteTitle" hidden>
+      <div class="match-complete-dialog" role="dialog" aria-modal="true">
+        <span class="match-complete-mark" aria-hidden="true">VN</span>
+        <h2 id="matchCompleteTitle">Hoàn thành trận đấu</h2>
+        <div class="match-complete-stats">
+          <div>
+            <span>Tổng điểm</span>
+            <strong id="matchCompleteScore">0</strong>
+          </div>
+          <div>
+            <span>Thời gian</span>
+            <strong id="matchCompleteTime">00:00</strong>
+          </div>
+        </div>
+        <p>Tự động về sảnh sau <strong id="matchCompleteCountdown">5</strong> giây</p>
+        <button class="primary-button" id="matchCompleteLobbyButton" type="button">Về sảnh ngay</button>
+      </div>
+    </section>
+
     <!-- The whole game is locked to the browser viewport; CSS prevents page scrolling. -->
     <div class="app-shell" id="gameApp" hidden>
       <!-- Header: persistent game information shown above the play area. -->

@@ -51,6 +51,7 @@
     round_score: null,
     results_cache: new Map(),
     timer_id: null,
+    completion_timer_id: null,
     match_id: null,
     match_started_at: null,
     submitting_guess: false
@@ -127,7 +128,12 @@
     preparation_progress: document.getElementById("preparationProgress"),
     preparation_count: document.getElementById("preparationCount"),
     preparation_retry_button: document.getElementById("preparationRetryButton"),
-    preparation_cancel_button: document.getElementById("preparationCancelButton")
+    preparation_cancel_button: document.getElementById("preparationCancelButton"),
+    match_complete: document.getElementById("matchComplete"),
+    match_complete_score: document.getElementById("matchCompleteScore"),
+    match_complete_time: document.getElementById("matchCompleteTime"),
+    match_complete_countdown: document.getElementById("matchCompleteCountdown"),
+    match_complete_lobby_button: document.getElementById("matchCompleteLobbyButton")
   };
 
   function currentRound() {
@@ -1669,6 +1675,7 @@
       if (payload.finished) stopMatchTimer();
       render();
       requestMapDraw();
+      if (payload.finished) showMatchComplete();
       decodeRoundsAhead(state.round_index + 1).catch((error) => {
         console.warn("Could not decode later rounds:", error);
       });
@@ -1723,6 +1730,33 @@
     }
   }
 
+  function showMatchComplete() {
+    clearCompletionTimer();
+    let seconds_left = 5;
+    elements.match_complete_score.textContent = state.score.toLocaleString("en-US");
+    elements.match_complete_time.textContent = formatTime(state.seconds);
+    elements.match_complete_countdown.textContent = seconds_left;
+    elements.match_complete.hidden = false;
+
+    state.completion_timer_id = window.setInterval(() => {
+      seconds_left -= 1;
+      elements.match_complete_countdown.textContent = Math.max(0, seconds_left);
+      if (seconds_left <= 0) showModeMenu();
+    }, 1000);
+  }
+
+  function clearCompletionTimer() {
+    if (state.completion_timer_id !== null) {
+      window.clearInterval(state.completion_timer_id);
+      state.completion_timer_id = null;
+    }
+  }
+
+  function hideMatchComplete() {
+    clearCompletionTimer();
+    elements.match_complete.hidden = true;
+  }
+
   async function startStandardMatch() {
     const run_id = ++preparation_run_id;
     resetGameState();
@@ -1730,6 +1764,7 @@
     rounds.splice(0, rounds.length);
     state.match_id = null;
     state.match_started_at = null;
+    hideMatchComplete();
 
     elements.mode_menu.hidden = true;
     elements.game_app.hidden = false;
@@ -1831,6 +1866,7 @@
   function showModeMenu() {
     preparation_run_id += 1;
     stopMatchTimer();
+    hideMatchComplete();
     hidePreparation();
     releaseRoundImages();
     rounds.splice(0, rounds.length);
@@ -1876,6 +1912,7 @@
   elements.back_to_menu_button.addEventListener("click", showModeMenu);
   elements.preparation_retry_button.addEventListener("click", startStandardMatch);
   elements.preparation_cancel_button.addEventListener("click", showModeMenu);
+  elements.match_complete_lobby_button.addEventListener("click", showModeMenu);
 
   window.addEventListener("beforeunload", () => {
     releaseRoundImages();
