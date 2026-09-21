@@ -152,7 +152,7 @@ The preparation screen downloads all selected compressed images with three concu
 
 Round image responses use a one-year private immutable browser cache. Stable opaque asset URLs allow reuse in later matches. The Worker also uses Cloudflare's Cache API after authentication; R2 edge caching requires a custom domain or Worker route because it has no effect on `*.workers.dev`.
 
-Wards remain lazy-loaded by selected province and zoom level. They are never preloaded with a match.
+The frontend does not request ward GeoJSON. Province and special-region files are sufficient for map drawing, hit-testing, flag placement, and scoring. Ward objects may remain in R2 for future features without affecting current loading time.
 
 ## Security Boundary
 

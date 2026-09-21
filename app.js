@@ -83,9 +83,6 @@
     hover_canvas_point: null,
     hovered_feature: null,
     province_properties_by_code: {},
-    ward_cache: new Map(),
-    ward_loading_code: null,
-    ward_loading_promises: new Map(),
     info_collapsed: false,
     resize_observer: null
   };
@@ -1060,7 +1057,7 @@
     elements.map_guess_marker.classList.add("is-visible");
   }
 
-  async function updateGuessAreaForWorldPoint(world_point, lookup_id) {
+  function updateGuessAreaForWorldPoint(world_point, lookup_id) {
     const feature = findFeatureAtWorldPoint(world_point);
     if (lookup_id !== state.guess_lookup_id || !state.guess) return;
 
@@ -1089,54 +1086,6 @@
       ward_name: null
     };
     render();
-
-    const ward_features = await loadWardFeaturesForProvince(province_code);
-    if (lookup_id !== state.guess_lookup_id || !state.guess) return;
-
-    const ward_feature = findFeatureInListAtWorldPoint(world_point, ward_features);
-    if (ward_feature) {
-      state.guess_area = {
-        province_code,
-        province_name: feature.properties.name || feature.properties.full_name,
-        ward_name: ward_feature.properties.name || ward_feature.properties.full_name
-      };
-      render();
-    }
-  }
-
-  async function loadWardFeaturesForProvince(province_code) {
-    if (map_state.ward_cache.has(province_code)) {
-      return map_state.ward_cache.get(province_code);
-    }
-
-    if (map_state.ward_loading_promises.has(province_code)) {
-      return map_state.ward_loading_promises.get(province_code);
-    }
-
-    map_state.ward_loading_code = province_code;
-    const load_promise = (async () => {
-      const ward_geojson = await fetchJsonAsset(`wards/${province_code}.geojson`);
-      const parent_properties = map_state.province_properties_by_code[province_code] || null;
-      const ward_features = ward_geojson.features.map((feature) => {
-        return prepareFeature(feature, "ward", 0, parent_properties);
-      });
-
-      map_state.ward_cache.set(province_code, ward_features);
-      return ward_features;
-    })();
-
-    map_state.ward_loading_promises.set(province_code, load_promise);
-    try {
-      return await load_promise;
-    } catch (error) {
-      console.error(error);
-      return [];
-    } finally {
-      map_state.ward_loading_promises.delete(province_code);
-      if (map_state.ward_loading_code === province_code) {
-        map_state.ward_loading_code = null;
-      }
-    }
   }
 
   function updateMapCenterReadout() {
@@ -1253,17 +1202,6 @@
   function findFeatureAtWorldPoint(point) {
     for (let i = map_state.features.length - 1; i >= 0; i -= 1) {
       const feature = map_state.features[i];
-      if (isPointInFeature(point, feature)) {
-        return feature;
-      }
-    }
-
-    return null;
-  }
-
-  function findFeatureInListAtWorldPoint(point, features) {
-    for (let i = features.length - 1; i >= 0; i -= 1) {
-      const feature = features[i];
       if (isPointInFeature(point, feature)) {
         return feature;
       }
