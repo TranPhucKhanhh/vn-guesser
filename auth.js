@@ -26,6 +26,7 @@
   let auth_client = null;
   let last_account_trigger = null;
 
+  window.GEOGUESSER_CURRENT_USER = null;
   window.GEOGUESSER_GET_ACCESS_TOKEN = getAccessToken;
   window.GEOGUESSER_AUTH_READY = initializeAuth();
 
@@ -156,6 +157,9 @@
   function showAuthenticatedUser(user) {
     const display_name = usernameFor(user);
     const initials = initialsFor(display_name);
+
+    // Only expose the public display fields needed by the game UI.
+    window.GEOGUESSER_CURRENT_USER = { name: display_name, initials };
 
     elements.user_initials.textContent = initials;
     elements.user_name.textContent = display_name;

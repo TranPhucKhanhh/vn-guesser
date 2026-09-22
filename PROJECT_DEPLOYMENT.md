@@ -8,8 +8,9 @@ Browser
   | Auth0 access token
   v
 Cloudflare Worker
-  |-- Durable Object: match order, active round, score, expiry
-  |-- R2 binding: maps, wards, private image catalog, WebP images
+  |-- MatchSession Durable Objects: round order, score, timer, expiry
+  |-- LeaderboardStore Durable Object: serialized ranking updates
+  |-- R2 binding: maps, private images, leaderboard snapshot
   v
 Cloudflare R2: vietnam-map-data
 ```
@@ -27,11 +28,23 @@ POST /api/matches
 POST /api/matches/{matchId}/ready
 GET  /api/round-images/{opaqueAssetId}?size=1280
 POST /api/matches/{matchId}/rounds/{roundIndex}/guess
+GET  /api/leaderboards/standard_mode
+GET  /api/leaderboards/standard_mode/profiles/{publicProfileId}
 ```
 
 `POST /api/matches` selects eight rounds and creates one SQLite-backed Durable Object. The browser receives only opaque image IDs. The correct title, province, coordinates, distance, and score are returned after a valid one-time guess.
 
 The Durable Object binds each match to the Auth0 `sub`, enforces round order, rejects replayed submissions, and deletes the match after 24 hours.
+
+When the eighth guess is accepted, the Worker records the server-calculated score and elapsed time in the `LeaderboardStore` Durable Object. It ranks higher scores first and uses lower completion time as the tie-breaker. Only a SHA-256-derived public profile ID, display name, initials, score, time, and game count reach the leaderboard; raw Auth0 subjects are never returned.
+
+The serialized leaderboard is mirrored to this R2 object:
+
+```text
+leaderboard/standard_mode/entries.json
+```
+
+R2 folders are key prefixes, so this object creates the `leaderboard/standard_mode` folder structure in the dashboard. The Durable Object coordinates concurrent writes so one player's result cannot overwrite another player's update.
 
 Direct R2 access through the Worker is limited to:
 
@@ -102,6 +115,9 @@ Important non-secret variables are in `worker/wrangler.toml`:
 ROUND_CATALOG_KEY = "private/round-catalog.v1.json"
 STANDARD_MATCH_ROUND_COUNT = "8"
 MATCH_LIFETIME_SECONDS = "86400"
+STANDARD_LEADERBOARD_KEY = "leaderboard/standard_mode/entries.json"
+LEADERBOARD_MAX_ENTRIES = "1000"
+LEADERBOARD_PAGE_SIZE = "10"
 ALLOWED_ORIGINS = "https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080"
 ```
 
@@ -144,7 +160,7 @@ npx wrangler deploy --config worker\wrangler.toml
 git push origin main
 ```
 
-Deploying the Worker with the same service name keeps the existing `CF_API_TOKEN` secret. The first deployment creates the SQLite-backed `MatchSession` Durable Object namespace.
+Deploying the Worker with the same service name keeps the existing `CF_API_TOKEN` secret. Migration `v2` creates the SQLite-backed `LeaderboardStore` namespace; do not remove the existing `v1` migration.
 
 ## Caching Behavior
 
@@ -157,5 +173,7 @@ The frontend does not request ward GeoJSON. Province and special-region files ar
 ## Security Boundary
 
 Players can always inspect photographs downloaded by their browser. They cannot obtain answer coordinates from the frontend bundle, image URLs, or match-creation response. Auth0 protects the API, and scoring happens only inside the match Durable Object.
+
+Leaderboard names come from the user's Auth0 display profile and are public to authenticated players. The R2 leaderboard object is blocked by the generic object route and can only be read through the authenticated leaderboard API.
 
 Never commit `.private/`, `.r2-upload/`, Auth0 client secrets, Google/Facebook client secrets, or `CF_API_TOKEN`.

@@ -23,6 +23,7 @@
   let map_initialized = false;
   let map_load_promise = null;
   let preparation_run_id = 0;
+  let leaderboard_request_id = 0;
 
   // Map detail tuning. Larger zoom ratios switch to more detailed geometry.
   const MAP_ORIGINAL_DETAIL_ZOOM_RATIO = 6;
@@ -96,6 +97,7 @@
     mode_menu: document.getElementById("modeMenu"),
     game_app: document.getElementById("gameApp"),
     standard_match_button: document.getElementById("standardMatchButton"),
+    menu_leaderboard_button: document.getElementById("menuLeaderboardButton"),
     back_to_menu_button: document.getElementById("backToMenuButton"),
     round_image: document.getElementById("roundImage"),
     image_fallback: document.getElementById("imageFallback"),
@@ -130,7 +132,21 @@
     match_complete_score: document.getElementById("matchCompleteScore"),
     match_complete_time: document.getElementById("matchCompleteTime"),
     match_complete_countdown: document.getElementById("matchCompleteCountdown"),
-    match_complete_lobby_button: document.getElementById("matchCompleteLobbyButton")
+    match_complete_lobby_button: document.getElementById("matchCompleteLobbyButton"),
+    leaderboard_view: document.getElementById("leaderboardView"),
+    leaderboard_back_button: document.getElementById("leaderboardBackButton"),
+    leaderboard_refresh_button: document.getElementById("leaderboardRefreshButton"),
+    leaderboard_entries: document.getElementById("leaderboardEntries"),
+    leaderboard_status: document.getElementById("leaderboardStatus"),
+    leaderboard_profile: document.getElementById("leaderboardProfile"),
+    leaderboard_profile_close_button: document.getElementById("leaderboardProfileCloseButton"),
+    leaderboard_profile_avatar: document.getElementById("leaderboardProfileAvatar"),
+    leaderboard_profile_rank: document.getElementById("leaderboardProfileRank"),
+    leaderboard_profile_name: document.getElementById("leaderboardProfileName"),
+    leaderboard_profile_points: document.getElementById("leaderboardProfilePoints"),
+    leaderboard_profile_time: document.getElementById("leaderboardProfileTime"),
+    leaderboard_profile_games: document.getElementById("leaderboardProfileGames"),
+    leaderboard_profile_message: document.getElementById("leaderboardProfileMessage")
   };
 
   function currentRound() {
@@ -1610,7 +1626,13 @@
         answer: answerFromRound(currentRound())
       });
 
-      if (payload.finished) stopMatchTimer();
+      if (payload.finished) {
+        if (Number.isFinite(payload.completion?.timeMs)) {
+          state.seconds = Math.floor(payload.completion.timeMs / 1000);
+          elements.timer_value.textContent = formatTime(state.seconds);
+        }
+        stopMatchTimer();
+      }
       render();
       requestMapDraw();
       if (payload.finished) showMatchComplete();
@@ -1679,7 +1701,7 @@
     state.completion_timer_id = window.setInterval(() => {
       seconds_left -= 1;
       elements.match_complete_countdown.textContent = Math.max(0, seconds_left);
-      if (seconds_left <= 0) showModeMenu();
+      if (seconds_left <= 0) showLeaderboard();
     }, 1000);
   }
 
@@ -1714,7 +1736,10 @@
       const [match] = await Promise.all([
         fetchApiJson("api/matches", {
           method: "POST",
-          body: JSON.stringify({ mode: "standard" })
+          body: JSON.stringify({
+            mode: "standard",
+            playerName: window.GEOGUESSER_CURRENT_USER?.name || "Người chơi"
+          })
         }),
         map_ready
       ]);
@@ -1810,7 +1835,123 @@
     rounds.splice(0, rounds.length);
     state.match_id = null;
     elements.game_app.hidden = true;
+    elements.leaderboard_view.hidden = true;
+    closeLeaderboardProfile();
     elements.mode_menu.hidden = false;
+  }
+
+  async function showLeaderboard() {
+    preparation_run_id += 1;
+    stopMatchTimer();
+    hideMatchComplete();
+    hidePreparation();
+    releaseRoundImages();
+    rounds.splice(0, rounds.length);
+    state.match_id = null;
+    elements.game_app.hidden = true;
+    elements.mode_menu.hidden = true;
+    elements.leaderboard_view.hidden = false;
+    closeLeaderboardProfile();
+    await loadLeaderboard();
+  }
+
+  async function loadLeaderboard() {
+    const request_id = ++leaderboard_request_id;
+    elements.leaderboard_refresh_button.disabled = true;
+    elements.leaderboard_entries.replaceChildren();
+    elements.leaderboard_status.hidden = false;
+    elements.leaderboard_status.textContent = "Đang tải bảng xếp hạng...";
+
+    try {
+      const payload = await fetchApiJson("api/leaderboards/standard_mode");
+      if (request_id !== leaderboard_request_id) return;
+      renderLeaderboardEntries(payload.entries || []);
+    } catch (error) {
+      if (request_id !== leaderboard_request_id) return;
+      console.error("Leaderboard loading failed:", error);
+      elements.leaderboard_status.hidden = false;
+      elements.leaderboard_status.textContent = "Không thể tải bảng xếp hạng. Hãy thử lại.";
+    } finally {
+      if (request_id === leaderboard_request_id) {
+        elements.leaderboard_refresh_button.disabled = false;
+      }
+    }
+  }
+
+  function renderLeaderboardEntries(entries) {
+    elements.leaderboard_entries.replaceChildren();
+    if (!entries.length) {
+      elements.leaderboard_status.hidden = false;
+      elements.leaderboard_status.textContent = "Chưa có kết quả. Hãy hoàn thành trận đầu tiên.";
+      return;
+    }
+
+    elements.leaderboard_status.hidden = true;
+    for (const entry of entries) {
+      const row = document.createElement("div");
+      row.className = "leaderboard-row";
+      row.setAttribute("role", "row");
+
+      const rank = document.createElement("strong");
+      rank.className = "leaderboard-rank";
+      rank.textContent = `#${entry.rank}`;
+
+      const player = document.createElement("button");
+      player.className = "leaderboard-player";
+      player.type = "button";
+      player.dataset.profileId = entry.profileId;
+      player.setAttribute("aria-label", `Xem hồ sơ ${entry.name}`);
+
+      const avatar = document.createElement("span");
+      avatar.className = "leaderboard-avatar";
+      avatar.textContent = entry.initials || "U";
+      const name = document.createElement("span");
+      name.textContent = entry.name;
+      player.append(avatar, name);
+
+      const points = document.createElement("strong");
+      points.className = "leaderboard-points";
+      points.textContent = Number(entry.points || 0).toLocaleString("en-US");
+      const time = document.createElement("span");
+      time.className = "leaderboard-time";
+      time.textContent = formatTime(Math.floor(Number(entry.timeMs || 0) / 1000));
+      row.append(rank, player, points, time);
+      elements.leaderboard_entries.append(row);
+    }
+  }
+
+  async function openLeaderboardProfile(profile_id) {
+    elements.leaderboard_profile.hidden = false;
+    elements.leaderboard_profile_message.textContent = "Đang tải hồ sơ...";
+    elements.leaderboard_profile_avatar.textContent = "U";
+    elements.leaderboard_profile_rank.textContent = "Hạng #--";
+    elements.leaderboard_profile_name.textContent = "Người chơi";
+    elements.leaderboard_profile_points.textContent = "--";
+    elements.leaderboard_profile_time.textContent = "--:--";
+    elements.leaderboard_profile_games.textContent = "--";
+    elements.leaderboard_profile_close_button.focus();
+
+    try {
+      const payload = await fetchApiJson(
+        `api/leaderboards/standard_mode/profiles/${encodeURIComponent(profile_id)}`
+      );
+      const profile = payload.profile;
+      elements.leaderboard_profile_avatar.textContent = profile.initials || "U";
+      elements.leaderboard_profile_rank.textContent = `Hạng #${profile.rank}`;
+      elements.leaderboard_profile_name.textContent = profile.name;
+      elements.leaderboard_profile_points.textContent = Number(profile.points).toLocaleString("en-US");
+      elements.leaderboard_profile_time.textContent = formatTime(Math.floor(profile.timeMs / 1000));
+      elements.leaderboard_profile_games.textContent = String(profile.gamesPlayed);
+      elements.leaderboard_profile_message.textContent = "";
+    } catch (error) {
+      console.error("Leaderboard profile loading failed:", error);
+      elements.leaderboard_profile_message.textContent = "Không thể tải hồ sơ người chơi.";
+    }
+  }
+
+  function closeLeaderboardProfile() {
+    elements.leaderboard_profile.hidden = true;
+    elements.leaderboard_profile_message.textContent = "";
   }
 
   elements.round_image.addEventListener("load", () => {
@@ -1847,10 +1988,26 @@
 
   elements.restart_button.addEventListener("click", startStandardMatch);
   elements.standard_match_button.addEventListener("click", startStandardMatch);
+  elements.menu_leaderboard_button.addEventListener("click", showLeaderboard);
   elements.back_to_menu_button.addEventListener("click", showModeMenu);
   elements.preparation_retry_button.addEventListener("click", startStandardMatch);
   elements.preparation_cancel_button.addEventListener("click", showModeMenu);
-  elements.match_complete_lobby_button.addEventListener("click", showModeMenu);
+  elements.match_complete_lobby_button.addEventListener("click", showLeaderboard);
+  elements.leaderboard_back_button.addEventListener("click", showModeMenu);
+  elements.leaderboard_refresh_button.addEventListener("click", loadLeaderboard);
+  elements.leaderboard_entries.addEventListener("click", (event) => {
+    const player = event.target.closest(".leaderboard-player");
+    if (player?.dataset.profileId) openLeaderboardProfile(player.dataset.profileId);
+  });
+  elements.leaderboard_profile_close_button.addEventListener("click", closeLeaderboardProfile);
+  elements.leaderboard_profile.addEventListener("click", (event) => {
+    if (event.target === elements.leaderboard_profile) closeLeaderboardProfile();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.leaderboard_profile.hidden) {
+      closeLeaderboardProfile();
+    }
+  });
 
   window.addEventListener("beforeunload", () => {
     releaseRoundImages();

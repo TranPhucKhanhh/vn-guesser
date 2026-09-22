@@ -17,6 +17,9 @@ ROUND_CATALOG_KEY = "private/round-catalog.v1.json"
 ROUND_CATALOG_CACHE_SECONDS = "300"
 STANDARD_MATCH_ROUND_COUNT = "8"
 MATCH_LIFETIME_SECONDS = "86400"
+STANDARD_LEADERBOARD_KEY = "leaderboard/standard_mode/entries.json"
+LEADERBOARD_MAX_ENTRIES = "1000"
+LEADERBOARD_PAGE_SIZE = "10"
 AUTH0_ISSUER = "https://phuc-khanh.jp.auth0.com/"
 AUTH0_AUDIENCE = "https://vietnam-geoguesser-r2-guard.my-slave.workers.dev"
 ALLOWED_ORIGINS = "https://vn-guesser.pages.dev,http://localhost:8080,http://127.0.0.1:8080"
@@ -29,7 +32,14 @@ bucket_name = "vietnam-map-data"
 name = "MATCHES"
 class_name = "MatchSession"
 
+[[durable_objects.bindings]]
+name = "LEADERBOARDS"
+class_name = "LeaderboardStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MatchSession"]
 
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["LeaderboardStore"]

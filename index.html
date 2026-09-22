@@ -54,10 +54,13 @@
             <span>Chế độ chơi</span>
           </div>
         </div>
-        <button class="auth-user-button mode-menu-user" id="menuAuthUserButton" type="button" aria-label="Mở trang tài khoản" aria-expanded="false" hidden>
-          <span class="auth-user-initials" id="menuAuthUserInitials" aria-hidden="true">U</span>
-          <span class="auth-user-name" id="menuAuthUserName">Người chơi</span>
-        </button>
+        <div class="mode-menu-actions">
+          <button class="leaderboard-open-button" id="menuLeaderboardButton" type="button">Bảng xếp hạng</button>
+          <button class="auth-user-button mode-menu-user" id="menuAuthUserButton" type="button" aria-label="Mở trang tài khoản" aria-expanded="false" hidden>
+            <span class="auth-user-initials" id="menuAuthUserInitials" aria-hidden="true">U</span>
+            <span class="auth-user-name" id="menuAuthUserName">Người chơi</span>
+          </button>
+        </div>
       </header>
 
       <main class="mode-menu-content">
@@ -135,6 +138,54 @@
       </main>
     </section>
 
+    <section class="leaderboard-view" id="leaderboardView" aria-labelledby="leaderboardTitle" hidden>
+      <header class="leaderboard-header">
+        <div class="brand">
+          <button class="leaderboard-back-button" id="leaderboardBackButton" type="button" aria-label="Trở về sảnh" title="Trở về sảnh">&larr;</button>
+          <span class="brand-mark">VN</span>
+          <div>
+            <strong>Vietnam GeoGuesser</strong>
+            <span>Standard Match</span>
+          </div>
+        </div>
+        <button class="leaderboard-refresh-button" id="leaderboardRefreshButton" type="button">Làm mới</button>
+      </header>
+
+      <main class="leaderboard-content">
+        <div class="leaderboard-heading">
+          <span>Top 10 người chơi</span>
+          <h1 id="leaderboardTitle">Bảng xếp hạng</h1>
+          <p>Ưu tiên tổng điểm cao hơn, sau đó đến thời gian hoàn thành nhanh hơn.</p>
+        </div>
+
+        <div class="leaderboard-table" role="table" aria-label="Bảng xếp hạng Standard Match">
+          <div class="leaderboard-row leaderboard-columns" role="row">
+            <span role="columnheader">Hạng</span>
+            <span role="columnheader">Người chơi</span>
+            <span role="columnheader">Điểm</span>
+            <span role="columnheader">Thời gian</span>
+          </div>
+          <div class="leaderboard-entries" id="leaderboardEntries" role="rowgroup"></div>
+          <p class="leaderboard-status" id="leaderboardStatus" role="status">Đang tải bảng xếp hạng...</p>
+        </div>
+      </main>
+    </section>
+
+    <section class="leaderboard-profile" id="leaderboardProfile" aria-labelledby="leaderboardProfileName" hidden>
+      <div class="leaderboard-profile-dialog" role="dialog" aria-modal="true">
+        <button class="account-close-button" id="leaderboardProfileCloseButton" type="button" aria-label="Đóng hồ sơ" title="Đóng">&times;</button>
+        <div class="leaderboard-profile-avatar" id="leaderboardProfileAvatar" aria-hidden="true">U</div>
+        <span class="leaderboard-profile-rank" id="leaderboardProfileRank">Hạng #--</span>
+        <h2 id="leaderboardProfileName">Người chơi</h2>
+        <div class="leaderboard-profile-stats">
+          <div><span>Điểm cao nhất</span><strong id="leaderboardProfilePoints">0</strong></div>
+          <div><span>Thời gian tốt nhất</span><strong id="leaderboardProfileTime">00:00</strong></div>
+          <div><span>Số trận đã chơi</span><strong id="leaderboardProfileGames">0</strong></div>
+        </div>
+        <p class="leaderboard-profile-message" id="leaderboardProfileMessage" role="status"></p>
+      </div>
+    </section>
+
     <section class="match-preparation" id="matchPreparation" aria-labelledby="preparationTitle" hidden>
       <div class="preparation-dialog" role="dialog" aria-modal="true">
         <span class="preparation-mark" aria-hidden="true">VN</span>
@@ -165,8 +216,8 @@
             <strong id="matchCompleteTime">00:00</strong>
           </div>
         </div>
-        <p>Tự động về sảnh sau <strong id="matchCompleteCountdown">5</strong> giây</p>
-        <button class="primary-button" id="matchCompleteLobbyButton" type="button">Về sảnh ngay</button>
+        <p>Mở bảng xếp hạng sau <strong id="matchCompleteCountdown">5</strong> giây</p>
+        <button class="primary-button" id="matchCompleteLobbyButton" type="button">Xem bảng xếp hạng</button>
       </div>
     </section>
 

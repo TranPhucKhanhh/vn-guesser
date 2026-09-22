@@ -9,6 +9,9 @@ const DEFAULT_ROUND_CATALOG_KEY = "private/round-catalog.v1.json";
 const DEFAULT_MATCH_ROUND_COUNT = 8;
 const DEFAULT_MATCH_LIFETIME_SECONDS = 86_400;
 const DEFAULT_OBJECT_CACHE_SECONDS = 31_536_000;
+const DEFAULT_LEADERBOARD_KEY = "leaderboard/standard_mode/entries.json";
+const DEFAULT_LEADERBOARD_LIMIT = 1000;
+const DEFAULT_LEADERBOARD_PAGE_SIZE = 10;
 const ROUND_IMAGE_WIDTHS = new Set(["1280", "1920"]);
 
 let roundCatalogMemoryCache = null;
@@ -74,10 +77,23 @@ export default {
       return createMatch(authenticated, env, ctx, request);
     }
 
+    if (url.pathname === "/api/leaderboards/standard_mode") {
+      if (request.method !== "GET") return methodNotAllowed(env, request, ["GET"]);
+      return getStandardLeaderboard(env, request);
+    }
+
+    const leaderboardProfileRoute = url.pathname.match(
+      /^\/api\/leaderboards\/standard_mode\/profiles\/([a-f0-9]{24})$/i,
+    );
+    if (leaderboardProfileRoute) {
+      if (request.method !== "GET") return methodNotAllowed(env, request, ["GET"]);
+      return getStandardLeaderboardProfile(leaderboardProfileRoute[1], env, request);
+    }
+
     const readyRoute = url.pathname.match(/^\/api\/matches\/([0-9a-f]+)\/ready$/i);
     if (readyRoute) {
       if (request.method !== "POST") return methodNotAllowed(env, request, ["POST"]);
-      return forwardMatchRequest(readyRoute[1], "/ready", authenticated, env, request);
+      return forwardMatchRequest(readyRoute[1], "/ready", authenticated, env, ctx, request);
     }
 
     const guessRoute = url.pathname.match(
@@ -90,6 +106,7 @@ export default {
         `/rounds/${guessRoute[2]}/guess`,
         authenticated,
         env,
+        ctx,
         request,
       );
     }
@@ -187,6 +204,8 @@ export class MatchSession {
       const roundScore = calculateScore(distance);
       match.totalScore += roundScore;
       match.currentRoundIndex += 1;
+      const finished = match.currentRoundIndex >= match.rounds.length;
+      if (finished && !match.completedAt) match.completedAt = Date.now();
       await this.state.storage.put("match", match);
 
       return internalJson({
@@ -200,7 +219,16 @@ export class MatchSession {
           roundScore,
           totalScore: match.totalScore,
         },
-        finished: match.currentRoundIndex >= match.rounds.length,
+        finished,
+        completion: finished
+          ? {
+              profileId: match.profileId,
+              playerName: match.playerName,
+              points: match.totalScore,
+              timeMs: Math.max(0, match.completedAt - match.startedAt),
+              completedAt: match.completedAt,
+            }
+          : undefined,
       });
     }
 
@@ -209,6 +237,97 @@ export class MatchSession {
 
   async alarm() {
     await this.state.storage.deleteAll();
+  }
+}
+
+export class LeaderboardStore {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.recordQueue = Promise.resolve();
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/entries" && request.method === "GET") {
+      const snapshot = await this.getSnapshot();
+      return internalJson({ ok: true, snapshot });
+    }
+
+    const profileRoute = url.pathname.match(/^\/profiles\/([a-f0-9]{24})$/i);
+    if (profileRoute && request.method === "GET") {
+      const snapshot = await this.getSnapshot();
+      const index = snapshot.entries.findIndex(
+        (entry) => entry.profileId === profileRoute[1].toLowerCase(),
+      );
+      if (index < 0) return internalJson({ error: "Player profile not found." }, 404);
+      return internalJson({
+        ok: true,
+        profile: { ...snapshot.entries[index], rank: index + 1 },
+      });
+    }
+
+    if (url.pathname === "/record" && request.method === "POST") {
+      const result = normalizeLeaderboardResult(await readJsonBody(request));
+      if (!result) return internalJson({ error: "Invalid leaderboard result." }, 400);
+
+      const recording = this.recordQueue.then(() => this.recordResult(result));
+      this.recordQueue = recording.catch(() => {});
+      return recording;
+    }
+
+    return internalJson({ error: "Leaderboard route not found." }, 404);
+  }
+
+  async recordResult(result) {
+    const snapshot = await this.getSnapshot();
+    const existing = snapshot.entries.find((entry) => entry.profileId === result.profileId);
+    const gamesPlayed = (existing?.gamesPlayed || 0) + 1;
+    const bestResult = !existing || compareLeaderboardEntries(result, existing) < 0
+      ? result
+      : existing;
+    const entry = {
+      ...bestResult,
+      name: result.name,
+      initials: initialsForName(result.name),
+      gamesPlayed,
+      updatedAt: result.completedAt,
+    };
+    const entries = snapshot.entries
+      .filter((item) => item.profileId !== result.profileId)
+      .concat(entry)
+      .sort(compareLeaderboardEntries)
+      .slice(0, numberFromEnv(this.env.LEADERBOARD_MAX_ENTRIES, DEFAULT_LEADERBOARD_LIMIT));
+    const nextSnapshot = {
+      version: 1,
+      mode: "standard_mode",
+      updatedAt: new Date().toISOString(),
+      entries,
+    };
+
+    await this.state.storage.put("snapshot", nextSnapshot);
+    await this.env.DATA_BUCKET.put(
+      this.env.STANDARD_LEADERBOARD_KEY || DEFAULT_LEADERBOARD_KEY,
+      JSON.stringify(nextSnapshot),
+      { httpMetadata: { contentType: "application/json; charset=utf-8" } },
+    );
+
+    const rank = entries.findIndex((item) => item.profileId === result.profileId) + 1;
+    return internalJson({ ok: true, rank: rank || null });
+  }
+
+  async getSnapshot() {
+    const stored = await this.state.storage.get("snapshot");
+    if (stored) return normalizeLeaderboardSnapshot(stored);
+
+    const key = this.env.STANDARD_LEADERBOARD_KEY || DEFAULT_LEADERBOARD_KEY;
+    const object = await this.env.DATA_BUCKET.get(key);
+    const snapshot = object
+      ? normalizeLeaderboardSnapshot(await object.json())
+      : emptyLeaderboardSnapshot();
+    await this.state.storage.put("snapshot", snapshot);
+    return snapshot;
   }
 }
 
@@ -221,6 +340,9 @@ async function createMatch(authenticated, env, ctx, request) {
   if (usageError) return usageError;
 
   try {
+    const payload = await readJsonBody(request);
+    const playerName = normalizePlayerName(payload?.playerName);
+    const profileId = await publicProfileId(authenticated.sub);
     const catalog = await getRoundCatalog(env, ctx);
     const requestedCount = Math.min(
       numberFromEnv(env.STANDARD_MATCH_ROUND_COUNT, DEFAULT_MATCH_ROUND_COUNT),
@@ -232,6 +354,8 @@ async function createMatch(authenticated, env, ctx, request) {
     const now = Date.now();
     const match = {
       playerSubject: authenticated.sub,
+      profileId,
+      playerName,
       createdAt: now,
       expiresAt:
         now +
@@ -281,7 +405,7 @@ async function createMatch(authenticated, env, ctx, request) {
   }
 }
 
-async function forwardMatchRequest(matchId, internalPath, authenticated, env, request) {
+async function forwardMatchRequest(matchId, internalPath, authenticated, env, ctx, request) {
   if (!env.MATCHES) {
     return json({ ok: false, error: "Match storage binding is unavailable." }, env, 500, request);
   }
@@ -304,7 +428,77 @@ async function forwardMatchRequest(matchId, internalPath, authenticated, env, re
     body,
   });
   const payload = await response.json();
+  if (response.ok && payload.finished && payload.completion) {
+    try {
+      const leaderboardResult = await recordStandardLeaderboardResult(
+        payload.completion,
+        env,
+        ctx,
+        request,
+      );
+      payload.leaderboard = leaderboardResult;
+    } catch (error) {
+      console.error("Leaderboard result recording failed:", error);
+      payload.leaderboard = { saved: false };
+    }
+  }
   return json({ ok: response.ok, ...payload }, env, response.status, request);
+}
+
+async function recordStandardLeaderboardResult(completion, env, ctx, request) {
+  if (!env.LEADERBOARDS) return { saved: false };
+  const usageError = await getUsageBlockResponse(env, ctx, request);
+  if (usageError) return { saved: false, blocked: true };
+
+  const response = await standardLeaderboardStub(env).fetch("https://leaderboard.internal/record", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(completion),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not record leaderboard result.");
+  return { saved: true, rank: payload.rank };
+}
+
+async function getStandardLeaderboard(env, request) {
+  if (!env.LEADERBOARDS) {
+    return json({ ok: false, error: "Leaderboard storage binding is unavailable." }, env, 500, request);
+  }
+
+  const response = await standardLeaderboardStub(env).fetch("https://leaderboard.internal/entries");
+  const payload = await response.json();
+  if (!response.ok) return json({ ok: false, ...payload }, env, response.status, request);
+  const limit = numberFromEnv(env.LEADERBOARD_PAGE_SIZE, DEFAULT_LEADERBOARD_PAGE_SIZE);
+  return json(
+    {
+      ok: true,
+      mode: payload.snapshot.mode,
+      updatedAt: payload.snapshot.updatedAt,
+      entries: payload.snapshot.entries.slice(0, limit).map((entry, index) => ({
+        ...entry,
+        rank: index + 1,
+      })),
+    },
+    env,
+    200,
+    request,
+  );
+}
+
+async function getStandardLeaderboardProfile(profileId, env, request) {
+  if (!env.LEADERBOARDS) {
+    return json({ ok: false, error: "Leaderboard storage binding is unavailable." }, env, 500, request);
+  }
+
+  const response = await standardLeaderboardStub(env).fetch(
+    `https://leaderboard.internal/profiles/${profileId.toLowerCase()}`,
+  );
+  const payload = await response.json();
+  return json({ ok: response.ok, ...payload }, env, response.status, request);
+}
+
+function standardLeaderboardStub(env) {
+  return env.LEADERBOARDS.get(env.LEADERBOARDS.idFromName("standard_mode"));
 }
 
 async function serveRoundImage(assetId, requestedWidth, env, ctx, request) {
@@ -499,6 +693,90 @@ function isValidStoredMatch(match) {
       Array.isArray(match.rounds) &&
       match.rounds.length > 0,
   );
+}
+
+function normalizePlayerName(value) {
+  if (typeof value !== "string") return "Người chơi";
+  const name = value.replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ");
+  return name.slice(0, 40) || "Người chơi";
+}
+
+function initialsForName(name) {
+  const parts = normalizePlayerName(name).split(/\s+/).filter(Boolean);
+  return parts
+    .slice(0, 2)
+    .map((part) => Array.from(part)[0] || "")
+    .join("")
+    .toUpperCase() || "U";
+}
+
+async function publicProfileId(subject) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(subject));
+  return Array.from(new Uint8Array(bytes).slice(0, 12), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function normalizeLeaderboardResult(value) {
+  const profileId = String(value?.profileId || "").toLowerCase();
+  const points = Number(value?.points);
+  const timeMs = Number(value?.timeMs);
+  const completedAt = new Date(value?.completedAt);
+  if (
+    !/^[a-f0-9]{24}$/.test(profileId) ||
+    !Number.isFinite(points) ||
+    points < 0 ||
+    points > 1_000_000 ||
+    !Number.isFinite(timeMs) ||
+    timeMs < 0 ||
+    timeMs > DEFAULT_MATCH_LIFETIME_SECONDS * 1000 ||
+    Number.isNaN(completedAt.getTime())
+  ) {
+    return null;
+  }
+
+  const name = normalizePlayerName(value.playerName ?? value.name);
+  return {
+    profileId,
+    name,
+    initials: initialsForName(name),
+    points: Math.round(points),
+    timeMs: Math.round(timeMs),
+    completedAt: completedAt.toISOString(),
+  };
+}
+
+function normalizeLeaderboardSnapshot(value) {
+  const entries = Array.isArray(value?.entries)
+    ? value.entries
+        .map((entry) => {
+          const normalized = normalizeLeaderboardResult(entry);
+          if (!normalized) return null;
+          return {
+            ...normalized,
+            gamesPlayed: Math.max(1, Math.floor(Number(entry.gamesPlayed) || 1)),
+            updatedAt: new Date(entry.updatedAt || normalized.completedAt).toISOString(),
+          };
+        })
+        .filter(Boolean)
+        .sort(compareLeaderboardEntries)
+    : [];
+
+  return {
+    version: 1,
+    mode: "standard_mode",
+    updatedAt: typeof value?.updatedAt === "string" ? value.updatedAt : null,
+    entries,
+  };
+}
+
+function emptyLeaderboardSnapshot() {
+  return { version: 1, mode: "standard_mode", updatedAt: null, entries: [] };
+}
+
+function compareLeaderboardEntries(left, right) {
+  return right.points - left.points || left.timeMs - right.timeMs ||
+    left.name.localeCompare(right.name, "vi");
 }
 
 async function readJsonBody(request) {
